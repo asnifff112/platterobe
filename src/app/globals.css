@@ -1,26 +1,101 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
+/* ── Design Tokens ───────────────────────────────────── */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Brand colours */
+  --color-cream: #f8f5e9;
+  --color-forest: #1e3a2e;
+  --color-sage: #6b8f56;
+  --color-tan: #d4b789;
+  --color-charcoal: #1a1a1a;
+
+  /* Semantic */
+  --color-background: #ffffff;
+  --color-surface: #f8f5e9;
+  --color-foreground: #1a1a1a;
+
+  /* Fonts */
+  --font-heading: var(--font-manrope), system-ui, sans-serif;
+  --font-body: var(--font-inter), system-ui, sans-serif;
+
+  /* Spacing extras */
+  --spacing-section: 6rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ── Base ────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-body);
+  background-color: var(--color-background);
+  color: var(--color-charcoal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* ── Typography Defaults ─────────────────────────────── */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--color-forest);
+}
+
+p {
+  line-height: 1.65;
+}
+
+/* ── Focus Styles ─────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-forest);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* ── Selection ────────────────────────────────────────── */
+::selection {
+  background-color: var(--color-tan);
+  color: var(--color-forest);
+}
+
+/* ── Utilities ────────────────────────────────────────── */
+.font-heading {
+  font-family: var(--font-heading);
+}
+
+.font-body {
+  font-family: var(--font-body);
+}
+
+/* Thin border utility */
+.border-rule {
+  border-color: rgba(26, 26, 26, 0.1);
+}
+
+/* ── Reduced Motion ─────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
