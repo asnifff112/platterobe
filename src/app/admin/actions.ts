@@ -213,6 +213,15 @@ export async function upsertProductAction(formData: FormData) {
     const shortDescription = (formData.get("shortDescription") as string)?.trim() || "";
     const description = (formData.get("description") as string)?.trim() || "";
     const whyYoullLikeIt = (formData.get("whyYoullLikeIt") as string)?.trim() || "";
+    const weightRaw = (formData.get("weight") as string)?.trim();
+    const weight = weightRaw ? weightRaw : null;
+
+    const sortOrderRaw = formData.get("sortOrder") as string | null;
+    let sortOrder: number | undefined = undefined;
+    if (sortOrderRaw !== null && sortOrderRaw !== undefined && sortOrderRaw.trim() !== "") {
+      const parsed = parseInt(sortOrderRaw.trim(), 10);
+      if (!isNaN(parsed)) sortOrder = parsed;
+    }
 
     // Parse Selling Price
     const priceRaw = formData.get("price") as string | null;
@@ -255,12 +264,19 @@ export async function upsertProductAction(formData: FormData) {
 
     const available = formData.get("available") === "on" || formData.get("available") === "true";
 
-    // Handle Image Upload
-    let imagePath = (formData.get("currentImage") as string) || "/images/classic-overnight-oats.jpg";
+    // Handle Image: allow custom URL, uploaded file, or fallback
+    let imagePath =
+      (formData.get("imageUrl") as string)?.trim() ||
+      (formData.get("currentImage") as string) ||
+      "/images/classic-overnight-oats.jpg";
+
     const imageFile = formData.get("imageFile") as File | null;
 
     if (imageFile && imageFile.size > 0 && typeof imageFile.arrayBuffer === "function") {
       try {
+        if (imageFile.size > 10 * 1024 * 1024) {
+          return { error: "Image file exceeds maximum allowed size of 10MB." };
+        }
         const bytes = await imageFile.arrayBuffer();
         const buffer = Buffer.from(bytes);
         const ext = path.extname(imageFile.name) || ".jpg";
@@ -281,15 +297,42 @@ export async function upsertProductAction(formData: FormData) {
       }
     }
 
-    // Handle Ingredients
-    const ingredientsRaw = formData.get("ingredients") as string | null;
-    let ingredients: { name: string; quantity: string }[] = [];
-    if (ingredientsRaw) {
-      ingredients = ingredientsRaw
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((line) => ({ name: line, quantity: "" }));
+    // Handle Ingredients - accept JSON structured ingredients
+    const ingredientsJson = formData.get("ingredientsJson") as string | null;
+    let ingredients: { name: string; quantity: string; unit?: string }[] = [];
+    if (ingredientsJson) {
+      try {
+        const parsed = JSON.parse(ingredientsJson);
+        if (Array.isArray(parsed)) {
+          ingredients = parsed
+            .filter((item) => item && typeof item.name === "string" && item.name.trim().length > 0)
+            .map((item) => ({
+              name: String(item.name).trim(),
+              quantity: String(item.quantity ?? "").trim(),
+              unit: item.unit ? String(item.unit).trim() : undefined,
+            }));
+        }
+      } catch (err) {
+        console.warn("Failed to parse ingredientsJson:", err);
+      }
+    }
+
+    // Fallback if ingredientsJson was not provided
+    if (ingredients.length === 0) {
+      const ingredientsRaw = formData.get("ingredients") as string | null;
+      if (ingredientsRaw) {
+        ingredients = ingredientsRaw
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => {
+            const match = line.match(/^(.*?)\s*[-—:]\s*(.*)$/);
+            if (match) {
+              return { name: match[1].trim(), quantity: match[2].trim() };
+            }
+            return { name: line, quantity: "" };
+          });
+      }
     }
 
     // Handle Nutrition
@@ -335,6 +378,8 @@ export async function upsertProductAction(formData: FormData) {
         nutrition,
         category,
         available,
+        weight,
+        sortOrder,
       });
     } else {
       createProduct({
@@ -352,6 +397,8 @@ export async function upsertProductAction(formData: FormData) {
         nutrition,
         category,
         available,
+        weight,
+        sortOrder,
       });
     }
 

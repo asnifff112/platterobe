@@ -128,13 +128,19 @@ export default async function ProductPage({ params }: Props) {
 
               {/* Primary Order Action (Uses selling price!) */}
               <div className="mb-10">
-                <WhatsAppButton
-                  productName={product.name}
-                  price={product.price}
-                  label="Order on WhatsApp"
-                  size="large"
-                  className="w-full sm:w-auto"
-                />
+                {product.available ? (
+                  <WhatsAppButton
+                    productName={product.name}
+                    price={product.price}
+                    label="Order on WhatsApp"
+                    size="large"
+                    className="w-full sm:w-auto"
+                  />
+                ) : (
+                  <div className="inline-flex items-center gap-2 px-6 py-3.5 bg-stone-100 border border-stone-300 rounded-[8px] text-stone-500 font-heading font-semibold text-[13px] uppercase tracking-[0.06em]">
+                    <span>Sold Out / Unavailable Today</span>
+                  </div>
+                )}
               </div>
 
               {/* Nutrition Information */}
@@ -142,10 +148,10 @@ export default async function ProductPage({ params }: Props) {
                 <h2 className="text-[12px] font-heading font-bold tracking-[0.14em] uppercase text-[#1E3A2E] mb-3">
                   Nutrition
                 </h2>
-                <NutritionGrid nutrition={product.nutrition} />
+                <NutritionGrid nutrition={product.nutrition} weight={product.weight} />
               </div>
 
-              {/* Ingredients (Names ONLY, no gram quantities) */}
+              {/* Ingredients */}
               <div className="border-t border-stone-200/80 pt-6 mb-8">
                 <h2 className="text-[12px] font-heading font-bold tracking-[0.14em] uppercase text-[#1E3A2E] mb-3">
                   Ingredients

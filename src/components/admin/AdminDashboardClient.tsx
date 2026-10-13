@@ -373,16 +373,23 @@ export default function AdminDashboardClient({
                       </button>
                     </td>
 
-                    {/* Nutrition */}
+                    {/* Nutrition & Weight */}
                     <td className="py-3.5 px-4 text-[12px] text-[#1A1A1A]/70">
-                      {item.nutrition.calories ? (
-                        <span>
-                          ~{item.nutrition.calories} kcal
-                          {item.nutrition.protein && ` • ${item.nutrition.protein}`}
-                        </span>
-                      ) : (
-                        <span className="text-stone-400">-</span>
-                      )}
+                      <div className="flex flex-col gap-0.5">
+                        {item.weight && (
+                          <span className="inline-block text-[11px] font-mono text-[#1E3A2E] font-semibold">
+                            {item.weight}
+                          </span>
+                        )}
+                        {item.nutrition.calories ? (
+                          <span className="text-stone-600">
+                            ~{item.nutrition.calories} kcal
+                            {item.nutrition.protein && ` · ${item.nutrition.protein}`}
+                          </span>
+                        ) : (
+                          <span className="text-stone-400">-</span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Availability Status */}

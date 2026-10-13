@@ -2,6 +2,7 @@ import type { Product } from "@/data/products";
 
 interface NutritionGridProps {
   nutrition: Product["nutrition"];
+  weight?: string | null;
 }
 
 type NutritionItem = {
@@ -9,9 +10,16 @@ type NutritionItem = {
   value: string;
 };
 
-export default function NutritionGrid({ nutrition }: NutritionGridProps) {
-  // Only collect verified, non-null values
+export default function NutritionGrid({ nutrition, weight }: NutritionGridProps) {
   const items: NutritionItem[] = [];
+
+  if (weight && weight.trim()) {
+    const cleanWeight = weight.trim();
+    items.push({
+      label: "Serving Size",
+      value: cleanWeight.toLowerCase().includes("g") ? cleanWeight : `${cleanWeight}g`,
+    });
+  }
 
   if (nutrition.calories !== null && nutrition.calories !== undefined) {
     items.push({

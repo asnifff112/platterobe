@@ -90,11 +90,11 @@ console.log("PASS: Idempotent re-seed succeeded without duplicate accounts (Coun
 console.log("\n>>> [CHECK 5] CATALOG PRESERVATION");
 const products = db.prepare("SELECT id, slug, category FROM products").all();
 console.log("PASS: Products count in SQLite:", products.length);
-if (products.length !== 8) {
+if (products.length !== 16) {
   console.error("FAIL: Product count mismatch");
   process.exit(1);
 }
-console.log("PASS: All 8 everyday platters preserved.");
+console.log("PASS: All 16 everyday platters preserved.");
 
 console.log("\n========================================");
 console.log("ALL AUTOMATED SECURITY CHECKS PASSED");

@@ -73,7 +73,7 @@ regular.forEach(r => console.log(`     - ${r.name}: Selling ₹${r.price}`));
 // 4. Check Total Catalog Count
 console.log("\n[TEST 4] Catalog Preservation:");
 console.log(`  [PASS] Total products in database: ${allProducts.length}`);
-if (allProducts.length !== 8) throw new Error("Expected exactly 8 catalog products!");
+if (allProducts.length !== 16) throw new Error("Expected exactly 16 catalog products!");
 
 console.log("\n==================================================");
 console.log("ALL VERIFICATION SUITE TESTS PASSED SUCCESSFULLY!");

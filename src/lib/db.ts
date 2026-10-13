@@ -94,6 +94,7 @@ function getDatabase(): Database.Database {
           available INTEGER NOT NULL DEFAULT 1,
           category TEXT NOT NULL DEFAULT 'breakfast',
           sort_order INTEGER NOT NULL DEFAULT 0,
+          weight TEXT DEFAULT '',
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
           updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
@@ -105,6 +106,9 @@ function getDatabase(): Database.Database {
 
       if (!colNames.includes("original_price")) {
         db.exec("ALTER TABLE products ADD COLUMN original_price REAL;");
+      }
+      if (!colNames.includes("weight")) {
+        db.exec("ALTER TABLE products ADD COLUMN weight TEXT DEFAULT '';");
       }
       if (!colNames.includes("is_featured")) {
         db.exec("ALTER TABLE products ADD COLUMN is_featured INTEGER NOT NULL DEFAULT 0;");
@@ -136,10 +140,10 @@ function getDatabase(): Database.Database {
         const insert = db.prepare(`
           INSERT INTO products (
             id, slug, name, subtitle, shortDescription, description, whyYoullLikeIt,
-            price, original_price, is_featured, image, ingredients, nutrition, available, category, sort_order
+            price, original_price, is_featured, image, ingredients, nutrition, available, category, sort_order, weight
           ) VALUES (
             @id, @slug, @name, @subtitle, @shortDescription, @description, @whyYoullLikeIt,
-            @price, @original_price, @is_featured, @image, @ingredients, @nutrition, @available, @category, @sort_order
+            @price, @original_price, @is_featured, @image, @ingredients, @nutrition, @available, @category, @sort_order, @weight
           )
         `);
 
@@ -163,6 +167,7 @@ function getDatabase(): Database.Database {
               available: item.available ? 1 : 0,
               category: normalizeCategoryKey(item.category || "breakfast"),
               sort_order: order++,
+              weight: item.weight || "",
             });
           }
         });
@@ -268,6 +273,7 @@ interface ProductRow {
   available: number;
   category: string;
   sort_order: number;
+  weight?: string;
   created_at: string;
   updated_at: string;
 }
@@ -309,6 +315,8 @@ function mapRowToProduct(row: ProductRow): Product {
     nutrition,
     available: Boolean(row.available),
     category: normalizeCategoryKey(row.category),
+    weight: row.weight || null,
+    sortOrder: row.sort_order ?? 0,
   };
 }
 
@@ -374,17 +382,20 @@ export function getProductById(id: string): Product | undefined {
 export function createProduct(product: Omit<Product, "id"> & { id?: string }): Product {
   const db = getDatabase();
   const id = product.id || String(Date.now());
-  const maxOrder = db.prepare("SELECT MAX(sort_order) as maxOrder FROM products").get() as { maxOrder: number | null };
-  const sortOrder = (maxOrder?.maxOrder ?? -1) + 1;
+  let sortOrder = product.sortOrder;
+  if (sortOrder === undefined || sortOrder === null) {
+    const maxOrder = db.prepare("SELECT MAX(sort_order) as maxOrder FROM products").get() as { maxOrder: number | null };
+    sortOrder = (maxOrder?.maxOrder ?? -1) + 1;
+  }
 
   const validCategory = normalizeCategoryKey(product.category || "breakfast");
 
   const stmt = db.prepare(`
     INSERT INTO products (
       id, slug, name, subtitle, shortDescription, description, whyYoullLikeIt,
-      price, original_price, is_featured, image, ingredients, nutrition, available, category, sort_order, updated_at
+      price, original_price, is_featured, image, ingredients, nutrition, available, category, sort_order, weight, updated_at
     ) VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')
     )
   `);
 
@@ -404,7 +415,8 @@ export function createProduct(product: Omit<Product, "id"> & { id?: string }): P
     JSON.stringify(product.nutrition || {}),
     product.available ? 1 : 0,
     validCategory,
-    sortOrder
+    sortOrder,
+    product.weight ?? ""
   );
 
   return getProductById(id)!;
@@ -417,6 +429,7 @@ export function updateProduct(id: string, updates: Partial<Product>): Product | 
 
   const merged = { ...existing, ...updates };
   const validCategory = normalizeCategoryKey(merged.category || "breakfast");
+  const sortOrder = merged.sortOrder !== undefined ? merged.sortOrder : (existing.sortOrder ?? 0);
 
   const stmt = db.prepare(`
     UPDATE products SET
@@ -434,6 +447,8 @@ export function updateProduct(id: string, updates: Partial<Product>): Product | 
       nutrition = ?,
       available = ?,
       category = ?,
+      weight = ?,
+      sort_order = ?,
       updated_at = datetime('now')
     WHERE id = ?
   `);
@@ -453,6 +468,8 @@ export function updateProduct(id: string, updates: Partial<Product>): Product | 
     JSON.stringify(merged.nutrition || {}),
     merged.available ? 1 : 0,
     validCategory,
+    merged.weight ?? "",
+    sortOrder,
     id
   );
 
