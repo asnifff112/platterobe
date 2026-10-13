@@ -305,7 +305,8 @@ export default function AdminDashboardClient({
                       <div className="flex items-center gap-3">
                         <div className="relative w-12 h-12 rounded-[6px] overflow-hidden bg-[#F8F5E9] border border-stone-200 shrink-0">
                           <Image
-                            src={item.image}
+                            src={item.image || "/images/classic-overnight-oats.jpg"}
+                            unoptimized={Boolean(item.image?.startsWith("data:"))}
                             alt={item.name}
                             fill
                             className="object-cover"

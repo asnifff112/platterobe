@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import type { Product, Ingredient } from "@/data/products";
 import { MENU_CATEGORIES, CategoryKey, normalizeCategoryKey } from "@/data/categories";
@@ -8,14 +8,16 @@ import { upsertProductAction } from "@/app/admin/actions";
 import {
   X,
   Upload,
+  RefreshCw,
   Plus,
   Trash2,
   ArrowUp,
   ArrowDown,
-  Sparkles,
   Star,
   CheckCircle2,
-  Image as ImageIcon,
+  AlertCircle,
+  Eye,
+  RotateCcw,
 } from "lucide-react";
 
 interface ProductFormModalProps {
@@ -32,16 +34,16 @@ interface IngredientRow {
   unit: string;
 }
 
-const PRESET_IMAGES = [
-  { label: "Classic Oats", url: "/images/classic-overnight-oats.jpg" },
-  { label: "Fruit Oats", url: "/images/fruit-overnight-oats.jpg" },
-  { label: "Chia Pudding", url: "/images/chia-banana-pudding.jpg" },
-  { label: "Egg & PB Toast", url: "/images/egg-pb-toast.jpg" },
-  { label: "PB Banana Sandwich", url: "/images/pb-banana-sandwich.jpg" },
-  { label: "Banana & Egg", url: "/images/banana-egg.jpg" },
-  { label: "Oat Pancakes", url: "/images/pancake.jpg" },
-  { label: "Smoothie Blend", url: "/images/banana-oats-smoothie.jpg" },
-  { label: "Hero Fresh Food", url: "/images/hero-food.jpg" },
+const PRESET_LIBRARY = [
+  { label: "ABC Glow Juice", url: "/images/abc-glow.jpg" },
+  { label: "Classic Oat Jar", url: "/images/classic-overnight-oats.jpg" },
+  { label: "Fruit Oat Jar", url: "/images/fruit-overnight-oats.jpg" },
+  { label: "Chia Cloud / Parfait", url: "/images/chia-banana-pudding.jpg" },
+  { label: "Protein Toast", url: "/images/egg-pb-toast.jpg" },
+  { label: "Peanut Stack", url: "/images/pb-banana-sandwich.jpg" },
+  { label: "Power Duo / Toast", url: "/images/banana-egg.jpg" },
+  { label: "Oat Cakes", url: "/images/pancake.jpg" },
+  { label: "Banana Blend", url: "/images/banana-oats-smoothie.jpg" },
 ];
 
 function parseInitialIngredients(
@@ -94,7 +96,9 @@ export default function ProductFormModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Form states
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // SECTION A: Basic Information
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [category, setCategory] = useState<CategoryKey>("breakfast");
@@ -103,30 +107,33 @@ export default function ProductFormModal({
   const [description, setDescription] = useState("");
   const [whyYoullLikeIt, setWhyYoullLikeIt] = useState("");
 
-  // Pricing & Inventory
+  // SECTION B: Product Image Management
+  const [currentSavedImage, setCurrentSavedImage] = useState("/images/classic-overnight-oats.jpg");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [newImagePreview, setNewImagePreview] = useState<string | null>(null);
+  const [customImageUrl, setCustomImageUrl] = useState("");
+
+  // SECTION C: Pricing
   const [price, setPrice] = useState("");
   const [originalPrice, setOriginalPrice] = useState("");
-  const [weight, setWeight] = useState("");
-  const [sortOrder, setSortOrder] = useState("");
-  const [isFeatured, setIsFeatured] = useState(false);
-  const [available, setAvailable] = useState(true);
 
-  // Nutrition
+  // SECTION D: Nutrition & Weight
+  const [weight, setWeight] = useState("");
   const [calories, setCalories] = useState("");
   const [protein, setProtein] = useState("");
   const [carbs, setCarbs] = useState("");
   const [fat, setFat] = useState("");
   const [fiber, setFiber] = useState("");
 
-  // Ingredients dynamic list
+  // SECTION E: Ingredients
   const [ingredients, setIngredients] = useState<IngredientRow[]>([]);
 
-  // Image management
-  const [imageUrl, setImageUrl] = useState("/images/classic-overnight-oats.jpg");
-  const [imagePreview, setImagePreview] = useState("/images/classic-overnight-oats.jpg");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  // SECTION F: Product Settings
+  const [isFeatured, setIsFeatured] = useState(false);
+  const [available, setAvailable] = useState(true);
+  const [sortOrder, setSortOrder] = useState("");
 
-  // Populate or reset form whenever modal opens or product changes
+  // Synchronize modal state when opened or product changes
   useEffect(() => {
     if (!isOpen) return;
 
@@ -139,17 +146,20 @@ export default function ProductFormModal({
       setDescription(product.description || "");
       setWhyYoullLikeIt(product.whyYoullLikeIt || "");
 
+      const activeImage = product.image || "/images/classic-overnight-oats.jpg";
+      setCurrentSavedImage(activeImage);
+      setCustomImageUrl(activeImage);
+      setSelectedFile(null);
+      setNewImagePreview(null);
+
       setPrice(product.price !== null && product.price !== undefined ? String(product.price) : "");
       setOriginalPrice(
         product.originalPrice !== null && product.originalPrice !== undefined
           ? String(product.originalPrice)
           : ""
       );
-      setWeight(product.weight || "");
-      setSortOrder(product.sortOrder !== undefined ? String(product.sortOrder) : "");
-      setIsFeatured(Boolean(product.isFeatured));
-      setAvailable(product.available !== undefined ? product.available : true);
 
+      setWeight(product.weight || "");
       setCalories(product.nutrition?.calories ? String(product.nutrition.calories) : "");
       setProtein(product.nutrition?.protein ? String(product.nutrition.protein).replace(/g$/i, "") : "");
       setCarbs(product.nutrition?.carbs ? String(product.nutrition.carbs).replace(/g$/i, "") : "");
@@ -157,11 +167,12 @@ export default function ProductFormModal({
       setFiber(product.nutrition?.fiber ? String(product.nutrition.fiber).replace(/g$/i, "") : "");
 
       setIngredients(parseInitialIngredients(product.ingredients));
-      setImageUrl(product.image || "/images/classic-overnight-oats.jpg");
-      setImagePreview(product.image || "/images/classic-overnight-oats.jpg");
-      setSelectedFile(null);
+
+      setIsFeatured(Boolean(product.isFeatured));
+      setAvailable(product.available !== undefined ? product.available : true);
+      setSortOrder(product.sortOrder !== undefined ? String(product.sortOrder) : "");
     } else {
-      // Adding new product
+      // New product defaults
       setName("");
       setSlug("");
       setCategory("breakfast");
@@ -170,13 +181,15 @@ export default function ProductFormModal({
       setDescription("");
       setWhyYoullLikeIt("");
 
+      setCurrentSavedImage("/images/classic-overnight-oats.jpg");
+      setCustomImageUrl("/images/classic-overnight-oats.jpg");
+      setSelectedFile(null);
+      setNewImagePreview(null);
+
       setPrice("");
       setOriginalPrice("");
-      setWeight("");
-      setSortOrder("");
-      setIsFeatured(false);
-      setAvailable(true);
 
+      setWeight("");
       setCalories("");
       setProtein("");
       setCarbs("");
@@ -187,16 +200,16 @@ export default function ProductFormModal({
         { id: "row-1", name: "", quantity: "", unit: "g" },
         { id: "row-2", name: "", quantity: "", unit: "g" },
       ]);
-      setImageUrl("/images/classic-overnight-oats.jpg");
-      setImagePreview("/images/classic-overnight-oats.jpg");
-      setSelectedFile(null);
+
+      setIsFeatured(false);
+      setAvailable(true);
+      setSortOrder("");
     }
     setError(null);
   }, [product, isOpen]);
 
   if (!isOpen) return null;
 
-  // Auto-generate slug from name if adding new product
   function handleNameChange(val: string) {
     setName(val);
     if (!isEditing && !slug) {
@@ -209,28 +222,46 @@ export default function ProductFormModal({
     }
   }
 
-  // Handle local image file selection
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  // Handle image replacement from file picker
+  function handleImageFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        setError("Image file exceeds maximum allowed size of 10MB.");
-        return;
-      }
-      setSelectedFile(file);
-      const objectUrl = URL.createObjectURL(file);
-      setImagePreview(objectUrl);
-      setError(null);
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      setError("Selected image exceeds 10MB limit. Please choose a smaller photo.");
+      return;
+    }
+
+    const validTypes = ["image/jpeg", "image/png", "image/webp", "image/avif", "image/gif"];
+    if (file.type && !validTypes.includes(file.type.toLowerCase())) {
+      setError("Please choose a valid JPG, PNG, WebP, AVIF, or GIF image.");
+      return;
+    }
+
+    setSelectedFile(file);
+    const previewUrl = URL.createObjectURL(file);
+    setNewImagePreview(previewUrl);
+    setError(null);
+  }
+
+  function handleRevertSelectedImage() {
+    setSelectedFile(null);
+    if (newImagePreview) {
+      URL.revokeObjectURL(newImagePreview);
+      setNewImagePreview(null);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   }
 
   function handleSelectPresetImage(url: string) {
-    setSelectedFile(null);
-    setImageUrl(url);
-    setImagePreview(url);
+    handleRevertSelectedImage();
+    setCurrentSavedImage(url);
+    setCustomImageUrl(url);
   }
 
-  // Dynamic Ingredient Actions
+  // Dynamic ingredient handlers
   function handleAddIngredient() {
     setIngredients((prev) => [
       ...prev,
@@ -243,11 +274,7 @@ export default function ProductFormModal({
     ]);
   }
 
-  function handleUpdateIngredient(
-    id: string,
-    field: "name" | "quantity" | "unit",
-    val: string
-  ) {
+  function handleUpdateIngredient(id: string, field: "name" | "quantity" | "unit", val: string) {
     setIngredients((prev) =>
       prev.map((row) => (row.id === id ? { ...row, [field]: val } : row))
     );
@@ -265,11 +292,11 @@ export default function ProductFormModal({
   function handleMoveIngredient(index: number, direction: "up" | "down") {
     setIngredients((prev) => {
       const copy = [...prev];
-      const targetIndex = direction === "up" ? index - 1 : index + 1;
-      if (targetIndex < 0 || targetIndex >= copy.length) return prev;
+      const target = direction === "up" ? index - 1 : index + 1;
+      if (target < 0 || target >= copy.length) return prev;
       const temp = copy[index];
-      copy[index] = copy[targetIndex];
-      copy[targetIndex] = temp;
+      copy[index] = copy[target];
+      copy[target] = temp;
       return copy;
     });
   }
@@ -281,21 +308,18 @@ export default function ProductFormModal({
     setError(null);
 
     try {
-      // Validate name
       if (!name.trim()) {
         setError("Product name is required.");
         setLoading(false);
         return;
       }
 
-      // Validate price
       if (!price.trim() || isNaN(parseFloat(price)) || parseFloat(price) < 0) {
         setError("Please enter a valid non-negative selling price.");
         setLoading(false);
         return;
       }
 
-      // Validate original price if supplied
       if (originalPrice.trim()) {
         const orig = parseFloat(originalPrice);
         const sell = parseFloat(price);
@@ -318,6 +342,7 @@ export default function ProductFormModal({
         fd.append("id", product.id);
       }
 
+      // Basic Information
       fd.append("name", name.trim());
       fd.append("slug", slug.trim());
       fd.append("category", category);
@@ -326,35 +351,34 @@ export default function ProductFormModal({
       fd.append("description", description.trim());
       fd.append("whyYoullLikeIt", whyYoullLikeIt.trim());
 
+      // Pricing
       fd.append("price", price.trim());
       if (originalPrice.trim()) {
         fd.append("originalPrice", originalPrice.trim());
       }
-      if (weight.trim()) {
-        fd.append("weight", weight.trim());
-      }
-      if (sortOrder.trim()) {
-        fd.append("sortOrder", sortOrder.trim());
-      }
 
-      fd.append("isFeatured", isFeatured ? "true" : "false");
-      fd.append("available", available ? "true" : "false");
-
-      // Nutrition
+      // Nutrition & Weight
+      if (weight.trim()) fd.append("weight", weight.trim());
       if (calories.trim()) fd.append("calories", calories.trim());
       if (protein.trim()) fd.append("protein", protein.trim());
       if (carbs.trim()) fd.append("carbs", carbs.trim());
       if (fat.trim()) fd.append("fat", fat.trim());
       if (fiber.trim()) fd.append("fiber", fiber.trim());
 
-      // Image
+      // Settings
+      fd.append("isFeatured", isFeatured ? "true" : "false");
+      fd.append("available", available ? "true" : "false");
+      if (sortOrder.trim()) fd.append("sortOrder", sortOrder.trim());
+
+      // Image Management
+      fd.append("currentImage", currentSavedImage);
       if (selectedFile) {
         fd.append("imageFile", selectedFile);
+      } else if (customImageUrl.trim()) {
+        fd.append("imageUrl", customImageUrl.trim());
       }
-      fd.append("imageUrl", imageUrl.trim());
-      fd.append("currentImage", imageUrl.trim());
 
-      // Structured dynamic ingredients
+      // Ingredients
       const cleanIngredients = ingredients
         .filter((i) => i.name.trim().length > 0)
         .map((i) => ({
@@ -362,7 +386,6 @@ export default function ProductFormModal({
           quantity: i.quantity.trim(),
           unit: i.unit.trim() || undefined,
         }));
-
       fd.append("ingredientsJson", JSON.stringify(cleanIngredients));
 
       const res = await upsertProductAction(fd);
@@ -380,21 +403,24 @@ export default function ProductFormModal({
       }
     } catch (err: unknown) {
       console.error(err);
-      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred while saving.";
       setError(msg);
       setLoading(false);
     }
   }
 
+  const effectivePreviewImage = newImagePreview || currentSavedImage;
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
-      <div className="relative w-full max-w-3xl bg-white rounded-[12px] shadow-2xl border border-stone-200 overflow-hidden my-8 max-h-[92vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 bg-[#F8F5E9]/80 shrink-0">
+      <div className="relative w-full max-w-4xl bg-white rounded-[12px] shadow-2xl border border-stone-200 overflow-hidden my-6 max-h-[94vh] flex flex-col animate-fadeIn">
+        
+        {/* MODAL HEADER */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 bg-[#F8F5E9]/90 shrink-0">
           <div>
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-heading font-semibold uppercase tracking-[0.08em] text-[#6B8F56]">
-                {isEditing ? "Product Management" : "New Platter"}
+                {isEditing ? "Complete Product Management" : "New Platter Creation"}
               </span>
               {isEditing && (
                 <span className="px-2 py-0.5 bg-stone-200/80 rounded text-[10px] font-mono text-stone-600">
@@ -402,7 +428,7 @@ export default function ProductFormModal({
                 </span>
               )}
             </div>
-            <h2 className="text-[20px] font-heading font-bold text-[#1E3A2E] leading-tight">
+            <h2 className="text-[20px] sm:text-[22px] font-heading font-bold text-[#1E3A2E] leading-tight">
               {isEditing ? `Edit "${product?.name}"` : "Add New Breakfast Platter"}
             </h2>
           </div>
@@ -415,19 +441,25 @@ export default function ProductFormModal({
           </button>
         </div>
 
-        {/* Scrollable Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto flex-1 font-body">
+        {/* SCROLLABLE FORM BODY */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-7 overflow-y-auto flex-1 font-body">
           {error && (
-            <div className="p-3.5 bg-red-50 border border-red-200 text-red-700 text-[13px] rounded-[6px] font-body">
-              {error}
+            <div className="p-4 bg-red-50 border border-red-200 text-red-800 text-[13px] rounded-[8px] flex items-start gap-2.5">
+              <AlertCircle size={18} className="text-red-600 shrink-0 mt-0.5" />
+              <div className="leading-relaxed">{error}</div>
             </div>
           )}
 
-          {/* Section 1: Basic Information */}
+          {/* ====================================================
+              SECTION A: BASIC INFORMATION
+          ==================================================== */}
           <div className="space-y-4">
-            <h3 className="text-[12px] font-heading font-bold uppercase tracking-[0.1em] text-[#1E3A2E] pb-1 border-b border-stone-200">
-              1. Basic Information
-            </h3>
+            <div className="flex items-center justify-between pb-1.5 border-b border-stone-200">
+              <h3 className="text-[13px] font-heading font-bold uppercase tracking-[0.08em] text-[#1E3A2E]">
+                Section A — Basic Information
+              </h3>
+              <span className="text-[11px] text-stone-500 font-medium">Core Catalog Details</span>
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -439,21 +471,21 @@ export default function ProductFormModal({
                   required
                   value={name}
                   onChange={(e) => handleNameChange(e.target.value)}
-                  placeholder="e.g. Oat Jar"
-                  className="w-full px-3.5 py-2.5 text-[14px] font-body bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
+                  placeholder="e.g. Oat Jar, ABC Glow..."
+                  className="w-full px-3.5 py-2.5 text-[14px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
                 />
               </div>
 
               <div>
                 <label className="block text-[12px] font-heading font-semibold uppercase tracking-[0.06em] text-[#1E3A2E] mb-1.5">
-                  Product Slug / URL *
+                  Product Slug / URL Path *
                 </label>
                 <input
                   type="text"
                   required
                   value={slug}
                   onChange={(e) => setSlug(e.target.value)}
-                  placeholder="e.g. oat-jar"
+                  placeholder="e.g. oat-jar, abc-glow"
                   className="w-full px-3.5 py-2.5 text-[14px] font-mono bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
                 />
                 <p className="text-[11px] text-stone-500 mt-1">
@@ -465,12 +497,12 @@ export default function ProductFormModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-[12px] font-heading font-semibold uppercase tracking-[0.06em] text-[#1E3A2E] mb-1.5">
-                  Category *
+                  Product Category *
                 </label>
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value as CategoryKey)}
-                  className="w-full px-3.5 py-2.5 text-[14px] font-body bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
+                  className="w-full px-3.5 py-2.5 text-[14px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
                 >
                   {MENU_CATEGORIES.map((cat) => (
                     <option key={cat.key} value={cat.key}>
@@ -489,34 +521,34 @@ export default function ProductFormModal({
                   value={subtitle}
                   onChange={(e) => setSubtitle(e.target.value)}
                   placeholder="e.g. Oats · Milk · Banana · Chia · Honey"
-                  className="w-full px-3.5 py-2.5 text-[14px] font-body bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
+                  className="w-full px-3.5 py-2.5 text-[14px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
                 />
               </div>
             </div>
 
             <div>
               <label className="block text-[12px] font-heading font-semibold uppercase tracking-[0.06em] text-[#1E3A2E] mb-1.5">
-                Short Description (Cards & Previews)
+                Short Description (Cards & Summaries)
               </label>
               <textarea
                 rows={2}
                 value={shortDescription}
                 onChange={(e) => setShortDescription(e.target.value)}
-                placeholder="Creamy overnight oats layered with banana, chia seeds, and raw honey."
-                className="w-full px-3.5 py-2.5 text-[14px] font-body bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
+                placeholder="Concise, appetizing preview for product cards and social shares..."
+                className="w-full px-3.5 py-2.5 text-[14px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
               />
             </div>
 
             <div>
               <label className="block text-[12px] font-heading font-semibold uppercase tracking-[0.06em] text-[#1E3A2E] mb-1.5">
-                Full Description (Product Detail Page)
+                Full Description (Product Details Page)
               </label>
               <textarea
                 rows={3}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Full culinary and nutritional description for the public product page..."
-                className="w-full px-3.5 py-2.5 text-[14px] font-body bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
+                placeholder="Full culinary and nutritional narrative for the product page..."
+                className="w-full px-3.5 py-2.5 text-[14px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
               />
             </div>
 
@@ -528,25 +560,202 @@ export default function ProductFormModal({
                 rows={2}
                 value={whyYoullLikeIt}
                 onChange={(e) => setWhyYoullLikeIt(e.target.value)}
-                placeholder="Key health and wellness benefits..."
-                className="w-full px-3.5 py-2.5 text-[14px] font-body bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
+                placeholder="Key benefits and reasons customers choose this platter..."
+                className="w-full px-3.5 py-2.5 text-[14px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
               />
             </div>
           </div>
 
-          {/* Section 2: Pricing & Settings */}
-          <div className="space-y-4">
-            <h3 className="text-[12px] font-heading font-bold uppercase tracking-[0.1em] text-[#1E3A2E] pb-1 border-b border-stone-200">
-              2. Pricing, Order & Settings
-            </h3>
+          {/* ====================================================
+              SECTION B: PRODUCT IMAGE REPLACEMENT & UPLOADS
+          ==================================================== */}
+          <div className="space-y-4 p-5 bg-[#F8F5E9]/50 border border-stone-200/90 rounded-[10px]">
+            <div className="flex items-center justify-between pb-2 border-b border-stone-200">
+              <div className="flex items-center gap-2">
+                <h3 className="text-[13px] font-heading font-bold uppercase tracking-[0.08em] text-[#1E3A2E]">
+                  Section B — Product Image Management
+                </h3>
+                <span className="px-2 py-0.5 bg-[#6B8F56]/15 text-[#1E3A2E] text-[10px] font-heading font-bold uppercase rounded">
+                  Live Preview
+                </span>
+              </div>
+              <span className="text-[11px] text-stone-500">
+                Persistent Storage Integration
+              </span>
+            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <p className="text-[12px] text-stone-600 leading-relaxed">
+              Upload a new photo from your computer to replace the current image. The file will be stored securely in persistent storage and immediately updated across the menu, homepage showcase, and product pages.
+            </p>
+
+            {/* Hidden File Input */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/jpeg,image/png,image/webp,image/avif,image/gif"
+              onChange={handleImageFileSelected}
+              className="hidden"
+            />
+
+            {/* Side-by-Side Image Comparison / Preview */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+              
+              {/* Box 1: Currently Saved Product Image */}
+              <div className="p-3.5 bg-white border border-stone-200 rounded-[8px] flex flex-col items-center">
+                <span className="text-[11px] font-heading font-semibold uppercase tracking-[0.06em] text-stone-500 mb-2">
+                  1. Current Saved Image
+                </span>
+                <div className="relative w-44 h-36 rounded-[6px] overflow-hidden bg-stone-100 border border-stone-200 shadow-sm">
+                  <Image
+                    src={currentSavedImage}
+                    alt="Current product image"
+                    fill
+                    unoptimized={currentSavedImage.startsWith("data:")}
+                    className="object-cover"
+                  />
+                </div>
+                <p className="text-[10px] font-mono text-stone-500 truncate max-w-[200px] mt-2">
+                  {currentSavedImage}
+                </p>
+              </div>
+
+              {/* Box 2: Newly Selected Replacement Image Preview */}
+              <div className={`p-3.5 rounded-[8px] border flex flex-col items-center transition-all ${
+                selectedFile
+                  ? "bg-emerald-50/60 border-emerald-300"
+                  : "bg-white border-dashed border-stone-300 text-stone-400"
+              }`}>
+                <span className={`text-[11px] font-heading font-semibold uppercase tracking-[0.06em] mb-2 ${
+                  selectedFile ? "text-emerald-800" : "text-stone-500"
+                }`}>
+                  {selectedFile ? "2. New Image Preview (Unsaved)" : "2. Replacement Preview"}
+                </span>
+
+                {newImagePreview ? (
+                  <>
+                    <div className="relative w-44 h-36 rounded-[6px] overflow-hidden bg-stone-100 border-2 border-emerald-500 shadow-sm">
+                      <Image
+                        src={newImagePreview}
+                        alt="Replacement preview"
+                        fill
+                        unoptimized
+                        className="object-cover"
+                      />
+                    </div>
+                    <div className="mt-2 text-center">
+                      <p className="text-[11px] font-semibold text-emerald-800 truncate max-w-[200px]">
+                        {selectedFile?.name}
+                      </p>
+                      <p className="text-[10px] text-stone-500">
+                        {selectedFile?.size ? `${Math.round(selectedFile.size / 1024)} KB` : ""} · Ready to save
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="w-44 h-36 rounded-[6px] border border-dashed border-stone-300 flex flex-col items-center justify-center p-3 text-center">
+                    <Upload size={22} className="text-stone-400 mb-1" />
+                    <span className="text-[11px] text-stone-500 font-medium">
+                      No new file chosen yet
+                    </span>
+                    <span className="text-[10px] text-stone-400 mt-0.5">
+                      Click &quot;Replace Image&quot; below
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Action Buttons: Replace Image & Upload New Image */}
+            <div className="flex flex-wrap items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#1E3A2E] text-white rounded-[6px] text-[13px] font-heading font-semibold uppercase tracking-[0.04em] hover:bg-[#162d22] transition-colors shadow-sm"
+              >
+                <RefreshCw size={15} />
+                <span>Replace Image</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-stone-300 text-stone-700 rounded-[6px] text-[13px] font-heading font-semibold uppercase tracking-[0.04em] hover:bg-stone-50 hover:border-stone-400 transition-colors"
+              >
+                <Upload size={15} />
+                <span>Upload New Image</span>
+              </button>
+
+              {selectedFile && (
+                <button
+                  type="button"
+                  onClick={handleRevertSelectedImage}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-[12px] font-body text-stone-600 hover:text-red-700 hover:bg-red-50 rounded-[6px] transition-colors"
+                >
+                  <RotateCcw size={13} />
+                  <span>Revert to Current</span>
+                </button>
+              )}
+            </div>
+
+            {/* Preset Photography Library */}
+            <div className="pt-2 border-t border-stone-200/80">
+              <span className="block text-[11px] font-heading font-semibold uppercase tracking-[0.05em] text-stone-500 mb-2">
+                Quick Select from Editorial Library:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {PRESET_LIBRARY.map((preset) => (
+                  <button
+                    key={preset.url}
+                    type="button"
+                    onClick={() => handleSelectPresetImage(preset.url)}
+                    className={`px-2.5 py-1 text-[11px] font-body rounded-[4px] border transition-colors ${
+                      currentSavedImage === preset.url && !selectedFile
+                        ? "bg-[#1E3A2E] text-white border-[#1E3A2E] font-medium"
+                        : "bg-white text-stone-700 border-stone-200 hover:border-stone-400"
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom Image URL Option */}
+            <div className="pt-2">
+              <label className="block text-[11px] font-heading font-semibold uppercase tracking-[0.05em] text-stone-500 mb-1">
+                Custom Image URL or Path
+              </label>
+              <input
+                type="text"
+                value={customImageUrl}
+                onChange={(e) => {
+                  setCustomImageUrl(e.target.value);
+                  setCurrentSavedImage(e.target.value);
+                }}
+                placeholder="/images/abc-glow.jpg or https://..."
+                className="w-full px-3 py-2 text-[12px] font-mono bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
+              />
+            </div>
+          </div>
+
+          {/* ====================================================
+              SECTION C: PRICING
+          ==================================================== */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between pb-1.5 border-b border-stone-200">
+              <h3 className="text-[13px] font-heading font-bold uppercase tracking-[0.08em] text-[#1E3A2E]">
+                Section C — Pricing
+              </h3>
+              <span className="text-[11px] text-stone-500 font-medium">Official Menu Rates</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-[12px] font-heading font-semibold uppercase tracking-[0.06em] text-[#1E3A2E] mb-1.5">
                   Selling Price (₹) *
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500 font-bold">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500 font-bold text-[15px]">
                     ₹
                   </span>
                   <input
@@ -557,18 +766,18 @@ export default function ProductFormModal({
                     value={price}
                     onChange={(e) => setPrice(e.target.value)}
                     placeholder="79"
-                    className="w-full pl-8 pr-3.5 py-2.5 text-[14px] font-body bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
+                    className="w-full pl-8 pr-3.5 py-2.5 text-[15px] font-heading font-bold text-[#1E3A2E] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
                   />
                 </div>
-                <p className="text-[11px] text-stone-500 mt-1">Official price charged on order</p>
+                <p className="text-[11px] text-stone-500 mt-1">Official selling price charged on order</p>
               </div>
 
               <div>
                 <label className="block text-[12px] font-heading font-semibold uppercase tracking-[0.06em] text-[#1E3A2E] mb-1.5">
-                  Original Price (₹ MRP)
+                  Original Price (₹ MRP Strikethrough)
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500 font-bold">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500 font-bold text-[15px]">
                     ₹
                   </span>
                   <input
@@ -578,73 +787,24 @@ export default function ProductFormModal({
                     value={originalPrice}
                     onChange={(e) => setOriginalPrice(e.target.value)}
                     placeholder="99"
-                    className="w-full pl-8 pr-3.5 py-2.5 text-[14px] font-body bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
+                    className="w-full pl-8 pr-3.5 py-2.5 text-[15px] font-heading text-stone-600 bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
                   />
                 </div>
-                <p className="text-[11px] text-stone-500 mt-1">Shows strikethrough & discount</p>
+                <p className="text-[11px] text-stone-500 mt-1">Shows strikethrough price with &quot;Save %&quot; badge</p>
               </div>
-
-              <div>
-                <label className="block text-[12px] font-heading font-semibold uppercase tracking-[0.06em] text-[#1E3A2E] mb-1.5">
-                  Display Order
-                </label>
-                <input
-                  type="number"
-                  step="1"
-                  value={sortOrder}
-                  onChange={(e) => setSortOrder(e.target.value)}
-                  placeholder="e.g. 1"
-                  className="w-full px-3.5 py-2.5 text-[14px] font-body bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
-                />
-                <p className="text-[11px] text-stone-500 mt-1">Sort rank in category list</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              <label className="flex items-center gap-3 p-3 border border-stone-200 rounded-[8px] bg-stone-50/50 hover:bg-stone-50 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={available}
-                  onChange={(e) => setAvailable(e.target.checked)}
-                  className="w-4 h-4 text-[#1E3A2E] rounded border-stone-300 focus:ring-[#1E3A2E]"
-                />
-                <div>
-                  <span className="block text-[13px] font-heading font-bold text-[#1E3A2E]">
-                    Available on Menu
-                  </span>
-                  <span className="text-[11px] text-stone-500">
-                    When unchecked, shows as &quot;Sold Out&quot; and prevents ordering.
-                  </span>
-                </div>
-              </label>
-
-              <label className="flex items-center gap-3 p-3 border border-stone-200 rounded-[8px] bg-stone-50/50 hover:bg-stone-50 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={isFeatured}
-                  onChange={(e) => setIsFeatured(e.target.checked)}
-                  className="w-4 h-4 text-[#1E3A2E] rounded border-stone-300 focus:ring-[#1E3A2E]"
-                />
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <Star size={13} className="text-amber-500 fill-amber-500" />
-                    <span className="text-[13px] font-heading font-bold text-[#1E3A2E]">
-                      Featured Platters
-                    </span>
-                  </div>
-                  <span className="text-[11px] text-stone-500">
-                    Display prominently on the homepage Featured Platters section.
-                  </span>
-                </div>
-              </label>
             </div>
           </div>
 
-          {/* Section 3: Nutrition & Weight */}
+          {/* ====================================================
+              SECTION D: NUTRITION & SERVING SIZE
+          ==================================================== */}
           <div className="space-y-4">
-            <h3 className="text-[12px] font-heading font-bold uppercase tracking-[0.1em] text-[#1E3A2E] pb-1 border-b border-stone-200">
-              3. Nutrition & Weight
-            </h3>
+            <div className="flex items-center justify-between pb-1.5 border-b border-stone-200">
+              <h3 className="text-[13px] font-heading font-bold uppercase tracking-[0.08em] text-[#1E3A2E]">
+                Section D — Nutrition & Serving Size
+              </h3>
+              <span className="text-[11px] text-stone-500 font-medium">Calculated Recipe Macros</span>
+            </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
               <div className="col-span-2 sm:col-span-2">
@@ -656,7 +816,7 @@ export default function ProductFormModal({
                   value={weight}
                   onChange={(e) => setWeight(e.target.value)}
                   placeholder="e.g. 302g"
-                  className="w-full px-3 py-2 text-[13px] font-body bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
+                  className="w-full px-3 py-2 text-[13px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
                 />
               </div>
 
@@ -669,7 +829,7 @@ export default function ProductFormModal({
                   value={calories}
                   onChange={(e) => setCalories(e.target.value)}
                   placeholder="440"
-                  className="w-full px-3 py-2 text-[13px] font-body bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
+                  className="w-full px-3 py-2 text-[13px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
                 />
               </div>
 
@@ -682,7 +842,7 @@ export default function ProductFormModal({
                   value={protein}
                   onChange={(e) => setProtein(e.target.value)}
                   placeholder="15g"
-                  className="w-full px-3 py-2 text-[13px] font-body bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
+                  className="w-full px-3 py-2 text-[13px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
                 />
               </div>
 
@@ -695,7 +855,7 @@ export default function ProductFormModal({
                   value={carbs}
                   onChange={(e) => setCarbs(e.target.value)}
                   placeholder="45g"
-                  className="w-full px-3 py-2 text-[13px] font-body bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
+                  className="w-full px-3 py-2 text-[13px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
                 />
               </div>
 
@@ -708,25 +868,27 @@ export default function ProductFormModal({
                   value={fat}
                   onChange={(e) => setFat(e.target.value)}
                   placeholder="12g"
-                  className="w-full px-3 py-2 text-[13px] font-body bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
+                  className="w-full px-3 py-2 text-[13px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
                 />
               </div>
             </div>
           </div>
 
-          {/* Section 4: Dynamic Ingredients Management */}
+          {/* ====================================================
+              SECTION E: DYNAMIC INGREDIENT MANAGEMENT
+          ==================================================== */}
           <div className="space-y-4">
-            <div className="flex items-center justify-between pb-1 border-b border-stone-200">
-              <h3 className="text-[12px] font-heading font-bold uppercase tracking-[0.1em] text-[#1E3A2E]">
-                4. Dynamic Ingredient Management
+            <div className="flex items-center justify-between pb-1.5 border-b border-stone-200">
+              <h3 className="text-[13px] font-heading font-bold uppercase tracking-[0.08em] text-[#1E3A2E]">
+                Section E — Ingredients Management
               </h3>
-              <span className="text-[11px] text-[#6B8F56] font-medium">
-                {ingredients.length} items configured
+              <span className="text-[11px] text-[#6B8F56] font-medium font-mono">
+                {ingredients.length} items
               </span>
             </div>
 
             <p className="text-[12px] text-stone-600 leading-relaxed">
-              Add, edit, remove, and reorder ingredients. These are displayed dynamically on the public product details page (e.g. <em>&quot;Oats — 60g&quot;</em>).
+              Add, edit, remove, or reorder ingredients. These records are stored in structured database columns and displayed on the public product details page (e.g. <em>&quot;Oats — 60g&quot;</em>).
             </p>
 
             <div className="space-y-2.5">
@@ -763,8 +925,8 @@ export default function ProductFormModal({
                       type="text"
                       value={ing.name}
                       onChange={(e) => handleUpdateIngredient(ing.id, "name", e.target.value)}
-                      placeholder="e.g. Oats, Milk, Banana..."
-                      className="w-full px-3 py-1.5 text-[13px] font-body bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
+                      placeholder="Ingredient Name (e.g. Oats, Milk...)"
+                      className="w-full px-3 py-1.5 text-[13px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
                     />
                   </div>
 
@@ -775,7 +937,7 @@ export default function ProductFormModal({
                       value={ing.quantity}
                       onChange={(e) => handleUpdateIngredient(ing.id, "quantity", e.target.value)}
                       placeholder="Quantity (60)"
-                      className="w-full px-3 py-1.5 text-[13px] font-body bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
+                      className="w-full px-3 py-1.5 text-[13px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
                     />
                   </div>
 
@@ -786,7 +948,7 @@ export default function ProductFormModal({
                       value={ing.unit}
                       onChange={(e) => handleUpdateIngredient(ing.id, "unit", e.target.value)}
                       placeholder="Unit (g/ml)"
-                      className="w-full px-3 py-1.5 text-[13px] font-body bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
+                      className="w-full px-3 py-1.5 text-[13px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
                     />
                   </div>
 
@@ -813,82 +975,74 @@ export default function ProductFormModal({
             </button>
           </div>
 
-          {/* Section 5: Photography & Image Management */}
+          {/* ====================================================
+              SECTION F: PRODUCT SETTINGS
+          ==================================================== */}
           <div className="space-y-4">
-            <h3 className="text-[12px] font-heading font-bold uppercase tracking-[0.1em] text-[#1E3A2E] pb-1 border-b border-stone-200">
-              5. Platter Photography
-            </h3>
+            <div className="flex items-center justify-between pb-1.5 border-b border-stone-200">
+              <h3 className="text-[13px] font-heading font-bold uppercase tracking-[0.08em] text-[#1E3A2E]">
+                Section F — Product Settings
+              </h3>
+              <span className="text-[11px] text-stone-500 font-medium">Availability & Showcase</span>
+            </div>
 
-            <div className="flex flex-col sm:flex-row gap-5 items-start">
-              {/* Current Preview */}
-              <div className="relative w-28 h-28 rounded-[8px] overflow-hidden border border-stone-300 shrink-0 bg-stone-100 shadow-sm">
-                <Image
-                  src={imagePreview}
-                  alt="Platter preview"
-                  fill
-                  className="object-cover"
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <label className="flex items-center gap-3 p-3.5 border border-stone-200 rounded-[8px] bg-stone-50/50 hover:bg-stone-50 cursor-pointer sm:col-span-1">
+                <input
+                  type="checkbox"
+                  checked={available}
+                  onChange={(e) => setAvailable(e.target.checked)}
+                  className="w-4 h-4 text-[#1E3A2E] rounded border-stone-300 focus:ring-[#1E3A2E]"
                 />
-              </div>
-
-              {/* Upload & Choice Controls */}
-              <div className="flex-1 space-y-3 w-full">
-                <label className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-stone-300 hover:border-[#1E3A2E] rounded-[8px] cursor-pointer bg-stone-50/50 hover:bg-stone-50 transition-colors">
-                  <Upload size={16} className="text-stone-500" />
-                  <span className="text-[13px] font-body text-stone-600">
-                    {selectedFile ? selectedFile.name : "Upload new image file (JPG, PNG, WebP)"}
-                  </span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileChange}
-                    className="hidden"
-                  />
-                </label>
-
-                {/* Preset image selector */}
                 <div>
-                  <span className="block text-[11px] font-heading font-semibold uppercase text-stone-500 mb-1.5">
-                    Or select from library presets:
+                  <span className="block text-[13px] font-heading font-bold text-[#1E3A2E]">
+                    Available on Menu
                   </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {PRESET_IMAGES.map((preset) => (
-                      <button
-                        key={preset.url}
-                        type="button"
-                        onClick={() => handleSelectPresetImage(preset.url)}
-                        className={`px-2.5 py-1 text-[11px] font-body rounded-[4px] border transition-colors ${
-                          imageUrl === preset.url && !selectedFile
-                            ? "bg-[#1E3A2E] text-white border-[#1E3A2E]"
-                            : "bg-white text-stone-700 border-stone-200 hover:border-stone-400"
-                        }`}
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
+                  <span className="text-[11px] text-stone-500">
+                    Uncheck to mark as &quot;Sold Out&quot;.
+                  </span>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-3 p-3.5 border border-stone-200 rounded-[8px] bg-stone-50/50 hover:bg-stone-50 cursor-pointer sm:col-span-1">
+                <input
+                  type="checkbox"
+                  checked={isFeatured}
+                  onChange={(e) => setIsFeatured(e.target.checked)}
+                  className="w-4 h-4 text-[#1E3A2E] rounded border-stone-300 focus:ring-[#1E3A2E]"
+                />
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <Star size={13} className="text-amber-500 fill-amber-500" />
+                    <span className="text-[13px] font-heading font-bold text-[#1E3A2E]">
+                      Featured Platters
+                    </span>
                   </div>
+                  <span className="text-[11px] text-stone-500">
+                    Display in homepage showcase.
+                  </span>
                 </div>
+              </label>
 
-                {/* Direct image URL input */}
-                <div>
-                  <label className="block text-[11px] font-heading font-semibold uppercase text-stone-500 mb-1">
-                    Image path / URL
-                  </label>
-                  <input
-                    type="text"
-                    value={imageUrl}
-                    onChange={(e) => {
-                      setImageUrl(e.target.value);
-                      setImagePreview(e.target.value);
-                    }}
-                    placeholder="/images/classic-overnight-oats.jpg"
-                    className="w-full px-3 py-1.5 text-[12px] font-mono bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
-                  />
-                </div>
+              <div className="p-3.5 border border-stone-200 rounded-[8px] bg-stone-50/50 sm:col-span-1">
+                <label className="block text-[11px] font-heading font-semibold uppercase text-stone-600 mb-1">
+                  Display Order Rank
+                </label>
+                <input
+                  type="number"
+                  step="1"
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value)}
+                  placeholder="e.g. 1"
+                  className="w-full px-3 py-1.5 text-[13px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
+                />
               </div>
             </div>
           </div>
 
-          {/* Footer Actions */}
+          {/* ====================================================
+              MODAL FOOTER ACTIONS
+          ==================================================== */}
           <div className="pt-4 border-t border-stone-200 flex items-center justify-end gap-3 shrink-0">
             <button
               type="button"
@@ -898,15 +1052,21 @@ export default function ProductFormModal({
             >
               Cancel
             </button>
+
             <button
               type="submit"
               disabled={loading}
-              className="px-6 py-2.5 text-[13px] font-heading font-semibold uppercase tracking-[0.04em] bg-[#1E3A2E] text-white hover:bg-[#162d22] rounded-[6px] transition-colors disabled:opacity-50 inline-flex items-center gap-2"
+              className="
+                inline-flex items-center gap-2
+                px-6 py-2.5 text-[13px] font-heading font-semibold uppercase tracking-[0.04em]
+                bg-[#1E3A2E] text-white hover:bg-[#162d22] rounded-[6px]
+                transition-colors disabled:opacity-50 shadow-sm
+              "
             >
               {loading && <span className="animate-spin">⏳</span>}
               <span>
                 {loading
-                  ? "Saving to Database..."
+                  ? "Saving Changes & Uploading..."
                   : isEditing
                   ? "Save Changes"
                   : "Create Platter"}

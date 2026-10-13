@@ -24,6 +24,7 @@ import {
   updateUserPassword,
 } from "@/lib/db";
 import type { Product } from "@/data/products";
+import { saveUploadedImage, cleanupOldImageSafely } from "@/lib/storage";
 import { isValidCategoryKey, normalizeCategoryKey, CategoryKey } from "@/data/categories";
 
 // ----------------------------------------------------------
@@ -265,35 +266,27 @@ export async function upsertProductAction(formData: FormData) {
     const available = formData.get("available") === "on" || formData.get("available") === "true";
 
     // Handle Image: allow custom URL, uploaded file, or fallback
+    const currentImage = (formData.get("currentImage") as string)?.trim() || "";
     let imagePath =
       (formData.get("imageUrl") as string)?.trim() ||
-      (formData.get("currentImage") as string) ||
+      currentImage ||
       "/images/classic-overnight-oats.jpg";
 
     const imageFile = formData.get("imageFile") as File | null;
 
     if (imageFile && imageFile.size > 0 && typeof imageFile.arrayBuffer === "function") {
       try {
-        if (imageFile.size > 10 * 1024 * 1024) {
-          return { error: "Image file exceeds maximum allowed size of 10MB." };
-        }
-        const bytes = await imageFile.arrayBuffer();
-        const buffer = Buffer.from(bytes);
-        const ext = path.extname(imageFile.name) || ".jpg";
-        const cleanName = slug || "platter";
-        const filename = `${cleanName}-${Date.now()}${ext}`;
-        const uploadDir = path.join(process.cwd(), "public", "uploads");
+        const uploadRes = await saveUploadedImage(imageFile, slug || name);
+        imagePath = uploadRes.url;
 
-        if (!fs.existsSync(uploadDir)) {
-          fs.mkdirSync(uploadDir, { recursive: true });
+        // Safely cleanup old image if replaced and no longer referenced
+        if (currentImage && currentImage !== imagePath) {
+          await cleanupOldImageSafely(currentImage, imagePath, id || undefined);
         }
-
-        const filePath = path.join(uploadDir, filename);
-        await fs.promises.writeFile(filePath, buffer);
-        imagePath = `/uploads/${filename}`;
-      } catch (err) {
-        console.error("Failed to save image upload:", err);
-        return { error: "Failed to upload image file. Please check file permissions and size." };
+      } catch (uploadErr: unknown) {
+        console.error("Failed to save uploaded image:", uploadErr);
+        const errorMsg = uploadErr instanceof Error ? uploadErr.message : "Failed to upload image.";
+        return { error: errorMsg };
       }
     }
 

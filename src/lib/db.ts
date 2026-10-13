@@ -60,7 +60,7 @@ export interface User {
   updated_at: string;
 }
 
-function getDatabase(): Database.Database {
+export function getDatabase(): Database.Database {
   if (!global.__platterobeDb) {
     const db = new Database(activeDbPath);
     try {

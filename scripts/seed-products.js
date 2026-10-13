@@ -449,7 +449,7 @@ const products = [
     price: 45,
     original_price: 60,
     is_featured: 0,
-    image: "/images/hero-food.jpg",
+    image: "/images/abc-glow.jpg",
     weight: "214g",
     sort_order: 16,
     available: 1,

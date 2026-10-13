@@ -78,7 +78,8 @@ export default async function ProductPage({ params }: Props) {
             <div className="lg:col-span-6">
               <div className="relative aspect-square w-full rounded-[8px] overflow-hidden bg-[#F8F5E9]">
                 <Image
-                  src={product.image}
+                  src={product.image || "/images/classic-overnight-oats.jpg"}
+                  unoptimized={Boolean(product.image?.startsWith("data:"))}
                   alt={`${product.name} — PLATTEROBE`}
                   fill
                   priority

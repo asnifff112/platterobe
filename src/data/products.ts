@@ -527,7 +527,7 @@ export const products: Product[] = [
     price: 45,
     originalPrice: 60,
     isFeatured: false,
-    image: "/images/hero-food.jpg",
+    image: "/images/abc-glow.jpg",
     weight: "214g",
     sortOrder: 16,
     ingredients: [
