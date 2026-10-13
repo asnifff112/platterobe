@@ -19,7 +19,7 @@ function getAdminEmail(): string {
 }
 
 function getAdminPassword(): string {
-  return process.env.ADMIN_PASSWORD || "asnifrisham@26";
+  return process.env.ADMIN_PASSWORD || "platterobe26!";
 }
 
 /**
