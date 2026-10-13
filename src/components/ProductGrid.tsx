@@ -5,7 +5,7 @@ import type { Product } from "@/data/products";
 import { MENU_CATEGORIES, normalizeCategoryKey } from "@/data/categories";
 import { siteConfig } from "@/config/site";
 import ProductCard from "./ProductCard";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 interface ProductGridProps {
   products: Product[];
@@ -66,7 +66,7 @@ export default function ProductGrid({
               y: 0,
               duration: 0.35,
               ease: "power2.out",
-              stagger: 0.05,
+              stagger: 0.04,
             }
           );
         }, sectionRef);
@@ -81,20 +81,20 @@ export default function ProductGrid({
   return (
     <section
       ref={sectionRef}
-      className="max-w-7xl mx-auto px-5 md:px-8 lg:px-12 py-12 md:py-20"
+      className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-12 py-10 sm:py-14 md:py-20"
       aria-label="Platters Menu"
     >
       {/* Header */}
       {showHeader && (
-        <div className="mb-8 md:mb-10 border-b border-stone-200/80 pb-6">
-          <p className="text-[11px] tracking-[0.16em] uppercase text-[#6B8F56] font-heading font-semibold mb-2">
+        <div className="mb-6 sm:mb-8 md:mb-10 border-b border-stone-200/80 pb-5 sm:pb-6">
+          <p className="text-[11px] tracking-[0.16em] uppercase text-[#6B8F56] font-heading font-semibold mb-1.5 sm:mb-2">
             Everyday Menu
           </p>
-          <h2 className="text-[32px] md:text-[44px] font-heading font-800 text-[#1E3A2E] tracking-[-0.03em] leading-tight">
+          <h2 className="text-[26px] sm:text-[34px] md:text-[44px] font-heading font-800 text-[#1E3A2E] tracking-[-0.03em] leading-tight">
             {title}
           </h2>
           {subtitle && (
-            <p className="text-[15px] text-[#1A1A1A]/60 mt-1 font-body">
+            <p className="text-[13px] sm:text-[15px] text-[#1A1A1A]/60 mt-1 font-body">
               {subtitle}
             </p>
           )}
@@ -103,11 +103,11 @@ export default function ProductGrid({
 
       {/* Category Filter Chips / Tabs */}
       {showCategories && (
-        <div className="mb-10 md:mb-12">
+        <div className="mb-7 sm:mb-10 md:mb-12">
           <div
             role="tablist"
             aria-label="Filter platters by category"
-            className="flex items-center gap-2 sm:gap-2.5 overflow-x-auto no-scrollbar py-1 -mx-5 px-5 md:mx-0 md:px-0 md:flex-wrap"
+            className="flex items-center gap-2 sm:gap-2.5 overflow-x-auto no-scrollbar py-1 -mx-4 px-4 sm:mx-0 sm:px-0 md:flex-wrap"
           >
             {CATEGORY_TABS.map((tab) => {
               const isActive = activeCategory === tab.key;
@@ -120,7 +120,7 @@ export default function ProductGrid({
                   aria-controls="menu-product-list"
                   onClick={() => setActiveCategory(tab.key)}
                   className={`
-                    shrink-0 inline-flex items-center gap-1.5 px-4 sm:px-5 py-2.5 rounded-full text-[13px] md:text-[14px]
+                    shrink-0 inline-flex items-center gap-1.5 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-full text-[12px] sm:text-[13px] md:text-[14px]
                     font-heading font-semibold transition-all duration-150 cursor-pointer select-none
                     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A2E] focus-visible:ring-offset-2
                     ${
@@ -142,14 +142,14 @@ export default function ProductGrid({
       <div id="menu-product-list" role="region" aria-live="polite">
         {filteredProducts.length === 0 ? (
           /* Clean Empty State */
-          <div className="py-16 md:py-20 px-6 sm:px-10 text-center bg-[#F8F5E9]/50 border border-stone-200/80 rounded-[12px] max-w-xl mx-auto my-4 animate-fadeIn">
+          <div className="py-14 sm:py-16 md:py-20 px-6 sm:px-10 text-center bg-[#F8F5E9]/50 border border-stone-200/80 rounded-[12px] max-w-xl mx-auto my-4 animate-fadeIn">
             <span className="inline-block px-3 py-1 bg-white border border-stone-200/70 rounded-full text-[11px] font-heading font-semibold uppercase tracking-[0.12em] text-[#6B8F56] mb-3">
               {activeCategoryMeta?.label || "Category"}
             </span>
-            <h3 className="text-[22px] md:text-[26px] font-heading font-bold text-[#1E3A2E] tracking-[-0.02em]">
+            <h3 className="text-[20px] sm:text-[24px] md:text-[26px] font-heading font-bold text-[#1E3A2E] tracking-[-0.02em]">
               Coming Soon
             </h3>
-            <p className="text-[14px] md:text-[15px] text-[#1A1A1A]/70 font-body mt-2.5 max-w-md mx-auto leading-relaxed">
+            <p className="text-[13px] sm:text-[14px] md:text-[15px] text-[#1A1A1A]/70 font-body mt-2 max-w-md mx-auto leading-relaxed">
               No platters are currently listed under {activeCategoryMeta?.label}.
               We prepare every batch with seasonal ingredients. Contact us on WhatsApp for daily specials and updates.
             </p>
@@ -180,10 +180,10 @@ export default function ProductGrid({
             </div>
           </div>
         ) : (
-          /* Product Cards Grid */
+          /* Responsive 2-column mobile grid, scaling to 3/4 columns on desktop */
           <div
             ref={gridRef}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 lg:gap-x-8 gap-y-10 lg:gap-y-12"
+            className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 sm:gap-x-6 lg:gap-x-8 gap-y-7 sm:gap-y-10 lg:gap-y-12"
           >
             {filteredProducts.map((product) => (
               <div key={product.id} className="product-card-item">

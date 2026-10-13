@@ -5,7 +5,7 @@ import Image from "next/image";
 import type { Product } from "@/data/products";
 import { MENU_CATEGORIES, CategoryKey, normalizeCategoryKey } from "@/data/categories";
 import { upsertProductAction } from "@/app/admin/actions";
-import { X, Upload, Sparkles } from "lucide-react";
+import { X, Upload, Sparkles, Star } from "lucide-react";
 
 interface ProductFormModalProps {
   product?: Product | null;
@@ -30,10 +30,23 @@ export default function ProductFormModal({
   const [category, setCategory] = useState<CategoryKey>(
     product?.category ? normalizeCategoryKey(product.category) : "breakfast"
   );
+
+  // Pricing states
   const [price, setPrice] = useState<string>(
     product?.price !== null && product?.price !== undefined ? String(product.price) : ""
   );
+  const [originalPrice, setOriginalPrice] = useState<string>(
+    product?.originalPrice !== null && product?.originalPrice !== undefined
+      ? String(product.originalPrice)
+      : ""
+  );
+
+  // Featured and Available flags
+  const [isFeatured, setIsFeatured] = useState<boolean>(
+    product ? Boolean(product.isFeatured) : false
+  );
   const [available, setAvailable] = useState<boolean>(product ? product.available : true);
+
   const [subtitle, setSubtitle] = useState(product?.subtitle || "");
   const [shortDescription, setShortDescription] = useState(product?.shortDescription || "");
   const [description, setDescription] = useState(product?.description || "");
@@ -108,6 +121,19 @@ export default function ProductFormModal({
       return;
     }
 
+    // Pricing validation
+    if (originalPrice.trim() && price.trim()) {
+      const orig = parseFloat(originalPrice.trim());
+      const sell = parseFloat(price.trim());
+      if (orig <= sell) {
+        setError(
+          `Original price (₹${orig}) must be greater than selling price (₹${sell}) to qualify as a discount.`
+        );
+        setLoading(false);
+        return;
+      }
+    }
+
     const formData = new FormData();
     if (product?.id) {
       formData.set("id", product.id);
@@ -115,8 +141,15 @@ export default function ProductFormModal({
     formData.set("name", name.trim());
     formData.set("slug", finalSlug);
     formData.set("category", category);
+
+    // Both prices
     formData.set("price", price.trim());
+    formData.set("originalPrice", originalPrice.trim());
+
+    // Featured and Availability
+    formData.set("isFeatured", isFeatured ? "true" : "false");
     formData.set("available", available ? "true" : "false");
+
     formData.set("subtitle", subtitle.trim());
     formData.set("shortDescription", shortDescription.trim());
     formData.set("description", description.trim());
@@ -233,55 +266,102 @@ export default function ProductFormModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-[12px] font-heading font-semibold uppercase tracking-[0.06em] text-[#1E3A2E] mb-1.5">
-                Category *
-              </label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value as CategoryKey)}
-                className="w-full px-3.5 py-2.5 text-[14px] font-body bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
-              >
-                {MENU_CATEGORIES.map((cat) => (
-                  <option key={cat.key} value={cat.key}>
-                    {cat.displayName}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {/* Category */}
+          <div>
+            <label className="block text-[12px] font-heading font-semibold uppercase tracking-[0.06em] text-[#1E3A2E] mb-1.5">
+              Category *
+            </label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value as CategoryKey)}
+              className="w-full px-3.5 py-2.5 text-[14px] font-body bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
+            >
+              {MENU_CATEGORIES.map((cat) => (
+                <option key={cat.key} value={cat.key}>
+                  {cat.displayName}
+                </option>
+              ))}
+            </select>
+          </div>
 
+          {/* Pricing Section (Selling Price & Original Price) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-stone-50/60 border border-stone-200/80 rounded-[8px]">
             <div>
-              <label className="block text-[12px] font-heading font-semibold uppercase tracking-[0.06em] text-[#1E3A2E] mb-1.5">
-                Price (₹)
+              <label className="block text-[12px] font-heading font-bold uppercase tracking-[0.06em] text-[#1E3A2E] mb-1.5">
+                Selling Price (₹) *
               </label>
               <input
                 type="number"
                 step="1"
                 min="0"
+                required
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                placeholder="e.g. 59"
+                placeholder="e.g. 99"
                 className="w-full px-3.5 py-2.5 text-[14px] font-body bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
               />
+              <p className="text-[11px] text-[#1A1A1A]/55 font-body mt-1">
+                Active price charged to customers and used for WhatsApp orders.
+              </p>
             </div>
 
             <div>
-              <label className="block text-[12px] font-heading font-semibold uppercase tracking-[0.06em] text-[#1E3A2E] mb-1.5">
-                Catalog Status
+              <label className="block text-[12px] font-heading font-bold uppercase tracking-[0.06em] text-[#1E3A2E] mb-1.5">
+                Original Price (₹) <span className="text-stone-400 font-normal lowercase">(optional MRP)</span>
               </label>
-              <label className="flex items-center gap-2.5 px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-[6px] cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={available}
-                  onChange={(e) => setAvailable(e.target.checked)}
-                  className="w-4 h-4 rounded text-[#1E3A2E] focus:ring-[#1E3A2E]"
-                />
-                <span className="text-[13px] font-body text-[#1A1A1A]">
-                  {available ? "Available" : "Sold Out / Hidden"}
-                </span>
-              </label>
+              <input
+                type="number"
+                step="1"
+                min="0"
+                value={originalPrice}
+                onChange={(e) => setOriginalPrice(e.target.value)}
+                placeholder="e.g. 129"
+                className="w-full px-3.5 py-2.5 text-[14px] font-body bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
+              />
+              <p className="text-[11px] text-[#1A1A1A]/55 font-body mt-1">
+                Displayed with strikethrough when greater than selling price.
+              </p>
             </div>
+          </div>
+
+          {/* Featured Platters & Catalog Availability Options */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-[#F8F5E9]/50 border border-stone-200/80 rounded-[8px]">
+            {/* Add to Featured Platters option */}
+            <label className="flex items-start gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isFeatured}
+                onChange={(e) => setIsFeatured(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded text-[#1E3A2E] focus:ring-[#1E3A2E]"
+              />
+              <div>
+                <span className="flex items-center gap-1.5 text-[13px] font-heading font-bold text-[#1E3A2E]">
+                  <Star size={13} className="fill-[#D4B789] text-[#D4B789]" />
+                  <span>Add to Featured Platters</span>
+                </span>
+                <span className="block text-[11px] text-[#1A1A1A]/60 font-body mt-0.5">
+                  Display in the Featured Platters showcase on the customer-facing homepage.
+                </span>
+              </div>
+            </label>
+
+            {/* Catalog Status option */}
+            <label className="flex items-start gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={available}
+                onChange={(e) => setAvailable(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded text-[#1E3A2E] focus:ring-[#1E3A2E]"
+              />
+              <div>
+                <span className="block text-[13px] font-heading font-bold text-[#1E3A2E]">
+                  Catalog Status
+                </span>
+                <span className="block text-[11px] text-[#1A1A1A]/60 font-body mt-0.5">
+                  {available ? "Available for ordering" : "Sold Out / Hidden"}
+                </span>
+              </div>
+            </label>
           </div>
 
           {/* Subtitle & Descriptions */}

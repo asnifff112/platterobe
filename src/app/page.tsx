@@ -7,11 +7,11 @@ import BrandStatement from "@/components/BrandStatement";
 import HowItWorks from "@/components/HowItWorks";
 import FinalCTA from "@/components/FinalCTA";
 import Footer from "@/components/Footer";
-import { getAvailableProducts } from "@/lib/db";
+import { getAvailableProducts, getFeaturedProducts } from "@/lib/db";
 
 export default function HomePage() {
   const allProducts = getAvailableProducts();
-  const featuredProducts = allProducts.slice(0, 4);
+  const featuredProducts = getFeaturedProducts();
 
   return (
     <>
@@ -25,14 +25,16 @@ export default function HomePage() {
         {/* SECTION 3: Thin horizontal divider / understated brand statement */}
         <EditorialStatementBanner />
 
-        {/* SECTION 4: Featured products in a structured grid */}
-        <ProductGrid
-          products={featuredProducts}
-          title="FEATURED PLATTERS"
-          subtitle="Curated daily essentials made with wholesome whole foods."
-          showHeader
-          showCategories={false}
-        />
+        {/* SECTION 4: Featured products managed dynamically by Admin */}
+        {featuredProducts.length > 0 && (
+          <ProductGrid
+            products={featuredProducts}
+            title="FEATURED PLATTERS"
+            subtitle="Curated daily essentials handpicked by our culinary team."
+            showHeader
+            showCategories={false}
+          />
+        )}
 
         {/* SECTION 5: Large editorial food image paired with short text block */}
         <EditorialShowcase />

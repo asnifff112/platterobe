@@ -58,7 +58,7 @@ export default function AdminLoginForm() {
               type="text"
               required
               autoComplete="username"
-              placeholder="admin@platterobe.co"
+              placeholder="platterobe@gmail.com"
               disabled={isPending}
               className="w-full pl-10 pr-4 py-3 text-[14px] font-body bg-[#F8F5E9]/30 border border-stone-300 rounded-[8px] text-[#1A1A1A] placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#1E3A2E] focus:border-transparent transition-all disabled:opacity-60"
             />
@@ -146,3 +146,4 @@ export default function AdminLoginForm() {
     </div>
   );
 }
+

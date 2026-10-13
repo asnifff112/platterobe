@@ -40,6 +40,17 @@ export default async function ProductPage({ params }: Props) {
 
   if (!product) notFound();
 
+  const hasDiscount = Boolean(
+    product.originalPrice &&
+      product.price !== null &&
+      product.originalPrice > product.price
+  );
+
+  const discountPercent =
+    hasDiscount && product.originalPrice && product.price !== null
+      ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
+      : 0;
+
   return (
     <>
       <Navbar />
@@ -74,21 +85,40 @@ export default async function ProductPage({ params }: Props) {
                   className="object-cover"
                   sizes="(max-width: 1024px) 100vw, 600px"
                 />
+
+                {hasDiscount && (
+                  <div className="absolute top-3 left-3 z-10">
+                    <span className="px-2.5 py-1 rounded-[4px] bg-[#1E3A2E] text-[#F8F5E9] text-[11px] font-heading font-bold uppercase tracking-[0.05em] shadow-sm">
+                      Save {discountPercent}%
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Right: Editorial Product Details */}
             <div className="lg:col-span-6 flex flex-col">
               {/* Product Name */}
-              <h1 className="text-[34px] sm:text-[42px] lg:text-[46px] font-heading font-800 text-[#1E3A2E] tracking-[-0.03em] leading-[1.08] mb-2 uppercase">
+              <h1 className="text-[32px] sm:text-[40px] lg:text-[46px] font-heading font-800 text-[#1E3A2E] tracking-[-0.03em] leading-[1.08] mb-2 uppercase">
                 {product.name}
               </h1>
 
-              {/* Price */}
-              <div className="mb-4">
+              {/* Price Row: Selling Price + Strikethrough Original Price + Badge */}
+              <div className="mb-4 flex flex-wrap items-baseline gap-3">
                 <span className="text-[30px] md:text-[34px] font-heading font-800 text-[#1E3A2E] tabular-nums tracking-[-0.02em]">
                   {product.price !== null ? `₹${product.price}` : "Price on request"}
                 </span>
+
+                {hasDiscount && (
+                  <>
+                    <span className="line-through text-stone-400 text-[18px] md:text-[20px] font-normal tabular-nums">
+                      ₹{product.originalPrice}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-[4px] bg-[#6B8F56]/15 text-[#1E3A2E] text-[11px] font-heading font-bold uppercase tracking-[0.04em]">
+                      Save {discountPercent}%
+                    </span>
+                  </>
+                )}
               </div>
 
               {/* Short Description */}
@@ -96,7 +126,7 @@ export default async function ProductPage({ params }: Props) {
                 {product.description}
               </p>
 
-              {/* Primary Order Action */}
+              {/* Primary Order Action (Uses selling price!) */}
               <div className="mb-10">
                 <WhatsAppButton
                   productName={product.name}

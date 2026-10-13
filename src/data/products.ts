@@ -21,7 +21,9 @@ export type Product = {
   shortDescription: string;
   description: string;
   whyYoullLikeIt: string;
-  price: number | null;
+  price: number | null; // Active Selling Price
+  originalPrice?: number | null; // Optional Original/MRP Price (for discount strikethrough)
+  isFeatured?: boolean; // Controls display in Featured Platters section
   image: string;
   ingredients: Ingredient[];
   nutrition: Nutrition;
@@ -41,6 +43,8 @@ export const products: Product[] = [
     whyYoullLikeIt:
       "Slow-release energy that keeps you full and focused throughout your morning. Clean, honest ingredients with zero fillers.",
     price: 59,
+    originalPrice: 79,
+    isFeatured: true,
     image: "/images/classic-overnight-oats.jpg",
     ingredients: [
       { name: "Oats", quantity: "55g" },
@@ -70,6 +74,8 @@ export const products: Product[] = [
     whyYoullLikeIt:
       "A powerhouse combination of 23g protein and healthy fats. Simple, filling, and genuinely satisfying without heavy seasoning.",
     price: 49,
+    originalPrice: null,
+    isFeatured: true,
     image: "/images/egg-pb-toast.jpg",
     ingredients: [
       { name: "Boiled eggs", quantity: "2 (~100g)" },
@@ -97,6 +103,8 @@ export const products: Product[] = [
     whyYoullLikeIt:
       "Natural sweetness from banana paired with protein and good fats from peanut butter. Clean fuel for work, workouts, or study.",
     price: 49,
+    originalPrice: 65,
+    isFeatured: false,
     image: "/images/pb-banana-sandwich.jpg",
     ingredients: [
       { name: "Bread", quantity: "3 slices (~75g)" },
@@ -124,6 +132,8 @@ export const products: Product[] = [
     whyYoullLikeIt:
       "Minimalist fuel at its finest. Just two whole-food staples delivering clean carbohydrates and bioavailable protein.",
     price: 49,
+    originalPrice: null,
+    isFeatured: false,
     image: "/images/banana-egg.jpg",
     ingredients: [
       { name: "Boiled banana", quantity: "2 (~200g peeled)" },
@@ -150,6 +160,8 @@ export const products: Product[] = [
     whyYoullLikeIt:
       "Comfort food without the crash. High protein (27g) paired with wholesome complex carbs and gentle natural sweetness.",
     price: 59,
+    originalPrice: 79,
+    isFeatured: true,
     image: "/images/pancake.jpg",
     ingredients: [
       { name: "Oats", quantity: "40g" },
@@ -181,6 +193,8 @@ export const products: Product[] = [
     whyYoullLikeIt:
       "Packed with soluble fiber, plant protein, and healthy omega fats. Digestively soothing, filling, and delicately sweet.",
     price: 59,
+    originalPrice: null,
+    isFeatured: false,
     image: "/images/chia-banana-pudding.jpg",
     ingredients: [
       { name: "Chia seeds", quantity: "20g" },
@@ -210,6 +224,8 @@ export const products: Product[] = [
     whyYoullLikeIt:
       "Ideal for mornings on the move. Gives you sustained energy and genuine satiety with no artificial protein powders or syrups.",
     price: 49,
+    originalPrice: 65,
+    isFeatured: false,
     image: "/images/banana-oats-smoothie.jpg",
     ingredients: [
       { name: "Banana", quantity: "~100g peeled" },
@@ -238,6 +254,8 @@ export const products: Product[] = [
     whyYoullLikeIt:
       "A vibrant morning bowl loaded with antioxidants, fiber, and clean natural sugars. Refreshing and filling.",
     price: 79,
+    originalPrice: 99,
+    isFeatured: true,
     image: "/images/fruit-overnight-oats.jpg",
     ingredients: [
       { name: "Oats", quantity: "55g" },

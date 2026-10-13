@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Product } from "@/data/products";
 import { MENU_CATEGORIES, getCategoryDisplayName, normalizeCategoryKey } from "@/data/categories";
-import { toggleProductStatus } from "@/app/admin/actions";
+import { toggleProductStatus, toggleProductFeaturedStatus } from "@/app/admin/actions";
 import ProductFormModal from "./ProductFormModal";
 import DeleteConfirmModal from "./DeleteConfirmModal";
 import {
@@ -18,6 +18,7 @@ import {
   XCircle,
   Eye,
   Filter,
+  Star,
 } from "lucide-react";
 
 interface AdminDashboardClientProps {
@@ -31,6 +32,7 @@ export default function AdminDashboardClient({
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [featuredOnly, setFeaturedOnly] = useState(false);
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
   // Sync state whenever initialProducts changes via router.refresh()
@@ -47,6 +49,7 @@ export default function AdminDashboardClient({
 
   // Status toggle state loading
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [togglingFeaturedId, setTogglingFeaturedId] = useState<string | null>(null);
 
   // Filtered products
   const filtered = products.filter((p) => {
@@ -57,12 +60,14 @@ export default function AdminDashboardClient({
     const matchesCategory =
       selectedCategory === "all" ||
       normalizeCategoryKey(p.category) === selectedCategory;
-    return matchesSearch && matchesCategory;
+    const matchesFeatured = !featuredOnly || Boolean(p.isFeatured);
+    return matchesSearch && matchesCategory && matchesFeatured;
   });
 
   // Metrics
   const totalCount = products.length;
   const availableCount = products.filter((p) => p.available).length;
+  const featuredCount = products.filter((p) => p.isFeatured).length;
   const prices = products.map((p) => p.price).filter((pr): pr is number => pr !== null);
   const minPrice = prices.length ? Math.min(...prices) : 0;
   const maxPrice = prices.length ? Math.max(...prices) : 0;
@@ -78,6 +83,25 @@ export default function AdminDashboardClient({
       console.error("Failed to toggle status:", err);
     } finally {
       setTogglingId(null);
+    }
+  }
+
+  async function handleToggleFeatured(product: Product) {
+    setTogglingFeaturedId(product.id);
+    try {
+      await toggleProductFeaturedStatus(product.id, Boolean(product.isFeatured));
+      const willBeFeatured = !product.isFeatured;
+      setSuccessToast(
+        willBeFeatured
+          ? `"${product.name}" added to Featured Platters.`
+          : `"${product.name}" removed from Featured Platters.`
+      );
+      setTimeout(() => setSuccessToast(null), 3000);
+      router.refresh();
+    } catch (err) {
+      console.error("Failed to toggle featured status:", err);
+    } finally {
+      setTogglingFeaturedId(null);
     }
   }
 
@@ -152,7 +176,19 @@ export default function AdminDashboardClient({
 
         <div className="bg-white p-5 rounded-[10px] border border-stone-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
           <p className="text-[11px] font-heading font-semibold uppercase tracking-[0.08em] text-[#1A1A1A]/50">
-            Price Range
+            Featured Platters
+          </p>
+          <p className="text-[28px] font-heading font-800 text-[#1E3A2E] mt-1">
+            {featuredCount}
+          </p>
+          <p className="text-[12px] text-[#D4B789] font-body mt-0.5 font-medium">
+            Active on homepage showcase
+          </p>
+        </div>
+
+        <div className="bg-white p-5 rounded-[10px] border border-stone-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+          <p className="text-[11px] font-heading font-semibold uppercase tracking-[0.08em] text-[#1A1A1A]/50">
+            Selling Price Range
           </p>
           <p className="text-[28px] font-heading font-800 text-[#1E3A2E] mt-1">
             {prices.length ? `₹${minPrice} - ₹${maxPrice}` : "-"}
@@ -161,21 +197,9 @@ export default function AdminDashboardClient({
             Daily essential pricing
           </p>
         </div>
-
-        <div className="bg-white p-5 rounded-[10px] border border-stone-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-          <p className="text-[11px] font-heading font-semibold uppercase tracking-[0.08em] text-[#1A1A1A]/50">
-            Database Engine
-          </p>
-          <p className="text-[28px] font-heading font-800 text-[#1E3A2E] mt-1">
-            SQLite
-          </p>
-          <p className="text-[12px] text-[#6B8F56] font-body mt-0.5">
-            Persistent local storage
-          </p>
-        </div>
       </div>
 
-      {/* Action Bar (Search, Filter, Add Button) */}
+      {/* Action Bar (Search, Category Filter, Featured Toggle, Add Button) */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
         <div className="flex flex-1 flex-col sm:flex-row items-stretch sm:items-center gap-3">
           {/* Search */}
@@ -194,7 +218,7 @@ export default function AdminDashboardClient({
           </div>
 
           {/* Category filter */}
-          <div className="relative sm:w-56">
+          <div className="relative sm:w-52">
             <Filter
               size={14}
               className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"
@@ -212,6 +236,26 @@ export default function AdminDashboardClient({
               ))}
             </select>
           </div>
+
+          {/* Featured Filter Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setFeaturedOnly(!featuredOnly)}
+            className={`
+              inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-[8px] text-[12px] font-heading font-semibold transition-all border
+              ${
+                featuredOnly
+                  ? "bg-[#1E3A2E] text-[#F8F5E9] border-[#1E3A2E]"
+                  : "bg-white text-[#1A1A1A]/70 border-stone-300 hover:border-[#1E3A2E] hover:text-[#1E3A2E]"
+              }
+            `}
+          >
+            <Star
+              size={13}
+              className={featuredOnly ? "fill-[#D4B789] text-[#D4B789]" : "text-stone-400"}
+            />
+            <span>Featured ({featuredCount})</span>
+          </button>
         </div>
 
         <button
@@ -236,9 +280,9 @@ export default function AdminDashboardClient({
               <tr className="border-b border-stone-200 bg-[#F8F5E9]/60 text-[11px] font-heading font-bold uppercase tracking-[0.08em] text-[#1E3A2E]">
                 <th className="py-3.5 px-4">Platter</th>
                 <th className="py-3.5 px-4">Category</th>
-                <th className="py-3.5 px-4">Price</th>
+                <th className="py-3.5 px-4">Pricing</th>
+                <th className="py-3.5 px-4">Featured</th>
                 <th className="py-3.5 px-4">Nutrition</th>
-                <th className="py-3.5 px-4">Ingredients</th>
                 <th className="py-3.5 px-4">Status</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
@@ -285,9 +329,48 @@ export default function AdminDashboardClient({
                       </span>
                     </td>
 
-                    {/* Price */}
-                    <td className="py-3.5 px-4 font-heading font-bold text-[#1E3A2E] text-[14px]">
-                      {item.price !== null ? `₹${item.price}` : "-"}
+                    {/* Pricing (Selling Price & Original Price with Strikethrough) */}
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="font-heading font-bold text-[#1E3A2E] text-[14px]">
+                          {item.price !== null ? `₹${item.price}` : "-"}
+                        </span>
+                        {item.originalPrice && item.price !== null && item.originalPrice > item.price && (
+                          <span className="line-through text-stone-400 text-[11px]">
+                            ₹{item.originalPrice}
+                          </span>
+                        )}
+                      </div>
+                      {item.originalPrice && item.price !== null && item.originalPrice > item.price && (
+                        <span className="inline-block mt-0.5 text-[10px] font-heading font-bold text-[#6B8F56]">
+                          Save {Math.round(((item.originalPrice - item.price) / item.originalPrice) * 100)}%
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Featured Platters status toggle */}
+                    <td className="py-3.5 px-4">
+                      <button
+                        onClick={() => handleToggleFeatured(item)}
+                        disabled={togglingFeaturedId === item.id}
+                        className={`
+                          inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-heading font-semibold tracking-[0.03em]
+                          transition-colors cursor-pointer select-none
+                          ${
+                            item.isFeatured
+                              ? "bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100"
+                              : "bg-stone-50 text-stone-500 border border-stone-200 hover:bg-stone-100 hover:text-stone-800"
+                          }
+                          ${togglingFeaturedId === item.id ? "opacity-50 cursor-wait" : ""}
+                        `}
+                        title={item.isFeatured ? "Click to remove from Featured Platters" : "Click to add to Featured Platters"}
+                      >
+                        <Star
+                          size={11}
+                          className={item.isFeatured ? "fill-amber-500 text-amber-500" : "text-stone-400"}
+                        />
+                        <span>{item.isFeatured ? "Featured" : "Standard"}</span>
+                      </button>
                     </td>
 
                     {/* Nutrition */}
@@ -300,11 +383,6 @@ export default function AdminDashboardClient({
                       ) : (
                         <span className="text-stone-400">-</span>
                       )}
-                    </td>
-
-                    {/* Ingredients Count */}
-                    <td className="py-3.5 px-4 text-[12px] text-[#1A1A1A]/70">
-                      {item.ingredients.length} items
                     </td>
 
                     {/* Availability Status */}

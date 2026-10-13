@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import path from "path";
 import fs from "fs";
+import bcrypt from "bcryptjs";
 import {
   verifyAdminCredentials,
   setAdminSessionCookie,
@@ -15,8 +16,12 @@ import {
   updateProduct,
   deleteProduct,
   toggleProductAvailability,
+  toggleProductFeatured,
   getProductById,
   getProductBySlug,
+  getUserById,
+  getUserByEmail,
+  updateUserPassword,
 } from "@/lib/db";
 import type { Product } from "@/data/products";
 import { isValidCategoryKey, normalizeCategoryKey, CategoryKey } from "@/data/categories";
@@ -40,12 +45,16 @@ export async function loginAction(
     return { error: "Please enter your admin email and password." };
   }
 
-  const isValid = verifyAdminCredentials(identifier, password);
-  if (!isValid) {
+  const authResult = verifyAdminCredentials(identifier, password);
+  if (!authResult.isValid || !authResult.user) {
     return { error: "Invalid admin email or password. Please try again." };
   }
 
-  await setAdminSessionCookie(identifier);
+  await setAdminSessionCookie(
+    authResult.user.id,
+    authResult.user.email,
+    authResult.user.role
+  );
   redirect("/admin");
 }
 
@@ -54,14 +63,63 @@ export async function logoutAction() {
   redirect("/admin/login");
 }
 
+export async function changePasswordAction(
+  prevState: { error?: string; success?: boolean; message?: string } | null,
+  formData: FormData
+) {
+  const session = await getAdminSession();
+  if (!session.isAuthenticated || !session.userId) {
+    return { error: "Unauthorized: Session has expired. Please log in again." };
+  }
+
+  const currentPassword = ((formData.get("currentPassword") as string) || "").trim();
+  const newPassword = ((formData.get("newPassword") as string) || "").trim();
+  const confirmPassword = ((formData.get("confirmPassword") as string) || "").trim();
+
+  if (!currentPassword || !newPassword) {
+    return { error: "Please provide both current and new passwords." };
+  }
+
+  if (newPassword.length < 8) {
+    return { error: "New password must be at least 8 characters long." };
+  }
+
+  if (newPassword !== confirmPassword) {
+    return { error: "New password and confirm password do not match." };
+  }
+
+  const user =
+    getUserById(session.userId) ||
+    (session.email ? getUserByEmail(session.email) : undefined);
+
+  if (!user) {
+    return { error: "Administrator account record not found in database." };
+  }
+
+  const isCurrentMatch = bcrypt.compareSync(currentPassword, user.password_hash);
+  if (!isCurrentMatch) {
+    return { error: "Current password is incorrect." };
+  }
+
+  const saltRounds = 10;
+  const newHash = bcrypt.hashSync(newPassword, saltRounds);
+  const updated = updateUserPassword(user.id, newHash);
+
+  if (!updated) {
+    return { error: "Failed to update password in database." };
+  }
+
+  return { success: true, message: "Password updated successfully." };
+}
+
 // ----------------------------------------------------------
-// Product Mutation Actions
+// Product Mutation Actions (Protected with admin role enforcement)
 // ----------------------------------------------------------
 
 export async function toggleProductStatus(id: string, currentlyAvailable: boolean) {
   const session = await getAdminSession();
-  if (!session.isAuthenticated) {
-    throw new Error("Unauthorized: Session has expired.");
+  if (!session.isAuthenticated || session.role !== "admin") {
+    throw new Error("Unauthorized: Administrator permissions required.");
   }
 
   const newStatus = !currentlyAvailable;
@@ -73,10 +131,25 @@ export async function toggleProductStatus(id: string, currentlyAvailable: boolea
   return { success: true, available: newStatus };
 }
 
+export async function toggleProductFeaturedStatus(id: string, currentlyFeatured: boolean) {
+  const session = await getAdminSession();
+  if (!session.isAuthenticated || session.role !== "admin") {
+    throw new Error("Unauthorized: Administrator permissions required.");
+  }
+
+  const newStatus = !currentlyFeatured;
+  toggleProductFeatured(id, newStatus);
+
+  revalidatePath("/admin");
+  revalidatePath("/");
+  revalidatePath("/menu");
+  return { success: true, isFeatured: newStatus };
+}
+
 export async function removeProduct(id: string) {
   const session = await getAdminSession();
-  if (!session.isAuthenticated) {
-    throw new Error("Unauthorized: Session has expired.");
+  if (!session.isAuthenticated || session.role !== "admin") {
+    throw new Error("Unauthorized: Administrator permissions required.");
   }
 
   const product = getProductById(id);
@@ -94,8 +167,8 @@ export async function removeProduct(id: string) {
 export async function upsertProductAction(formData: FormData) {
   try {
     const session = await getAdminSession();
-    if (!session.isAuthenticated) {
-      return { error: "Unauthorized: Your session has expired. Please sign in again." };
+    if (!session.isAuthenticated || session.role !== "admin") {
+      return { error: "Unauthorized: Administrator permissions required." };
     }
 
     const id = formData.get("id") as string | null;
@@ -141,16 +214,37 @@ export async function upsertProductAction(formData: FormData) {
     const description = (formData.get("description") as string)?.trim() || "";
     const whyYoullLikeIt = (formData.get("whyYoullLikeIt") as string)?.trim() || "";
 
-    // Parse Price
+    // Parse Selling Price
     const priceRaw = formData.get("price") as string | null;
     let price: number | null = null;
     if (priceRaw !== null && priceRaw !== undefined && priceRaw.trim() !== "") {
       const parsed = parseFloat(priceRaw.trim());
       if (isNaN(parsed) || parsed < 0) {
-        return { error: "Please enter a valid price." };
+        return { error: "Please enter a valid selling price." };
       }
       price = parsed;
     }
+
+    // Parse Original Price (Optional MRP for discount strikethrough)
+    const originalPriceRaw = formData.get("originalPrice") as string | null;
+    let originalPrice: number | null = null;
+    if (originalPriceRaw !== null && originalPriceRaw !== undefined && originalPriceRaw.trim() !== "") {
+      const parsedOriginal = parseFloat(originalPriceRaw.trim());
+      if (isNaN(parsedOriginal) || parsedOriginal < 0) {
+        return { error: "Please enter a valid original price." };
+      }
+      if (price !== null && parsedOriginal <= price) {
+        return {
+          error: `Original price (₹${parsedOriginal}) must be greater than selling price (₹${price}) to qualify as a discount.`,
+        };
+      }
+      originalPrice = parsedOriginal;
+    }
+
+    // Parse Featured Platters Status
+    const isFeatured =
+      formData.get("isFeatured") === "on" ||
+      formData.get("isFeatured") === "true";
 
     // Validate Category strictly against the 5 allowed categories
     const categoryRaw = formData.get("category") as string;
@@ -234,6 +328,8 @@ export async function upsertProductAction(formData: FormData) {
         description,
         whyYoullLikeIt,
         price,
+        originalPrice,
+        isFeatured,
         image: imagePath,
         ingredients,
         nutrition,
@@ -249,6 +345,8 @@ export async function upsertProductAction(formData: FormData) {
         description,
         whyYoullLikeIt,
         price,
+        originalPrice,
+        isFeatured,
         image: imagePath,
         ingredients,
         nutrition,
