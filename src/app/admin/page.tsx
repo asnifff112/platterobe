@@ -1,10 +1,11 @@
-﻿import { Suspense } from "react";
-import { redirect } from "next/navigation";
+﻿import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/auth";
 import { getAllProducts } from "@/lib/db";
 import AdminHeader from "@/components/admin/AdminHeader";
 import AdminDashboardClient from "@/components/admin/AdminDashboardClient";
 import type { Metadata } from "next";
+
+export const instant = false;
 
 export const metadata: Metadata = {
   title: "Admin Dashboard - Platter Management",
@@ -14,11 +15,11 @@ export const metadata: Metadata = {
   },
 };
 
-async function DashboardContent() {
+export default async function AdminDashboardPage() {
   const session = await getAdminSession();
 
-  // Server-side route protection: redirect unauthenticated users to /admin/login
-  if (!session.isAuthenticated) {
+  // Server-side route protection: redirect unauthenticated users to /admin/login immediately
+  if (!session.isAuthenticated || session.role !== "admin") {
     redirect("/admin/login");
   }
 
@@ -45,19 +46,5 @@ async function DashboardContent() {
         <AdminDashboardClient initialProducts={products} />
       </main>
     </div>
-  );
-}
-
-export default function AdminDashboardPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-[#F8F5E9] flex items-center justify-center font-heading text-[13px] text-[#1E3A2E]/60">
-          Loading console...
-        </div>
-      }
-    >
-      <DashboardContent />
-    </Suspense>
   );
 }
