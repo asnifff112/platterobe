@@ -1,4 +1,4 @@
-﻿import crypto from "crypto";
+import crypto from "crypto";
 import { cookies } from "next/headers";
 import { connection } from "next/server";
 import bcrypt from "bcryptjs";
@@ -19,7 +19,7 @@ function getAdminEmail(): string {
 }
 
 function getAdminPassword(): string {
-  return process.env.ADMIN_PASSWORD || "platterobe2026!";
+  return process.env.ADMIN_PASSWORD || "";
 }
 
 /**

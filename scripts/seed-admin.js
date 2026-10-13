@@ -1,4 +1,4 @@
-﻿const Database = require("better-sqlite3");
+const Database = require("better-sqlite3");
 const path = require("path");
 const fs = require("fs");
 const bcrypt = require("bcryptjs");
@@ -44,7 +44,7 @@ db.exec(`
 `);
 
 const email = (process.env.ADMIN_EMAIL || "platterobe@gmail.com").trim().toLowerCase();
-const password = process.env.ADMIN_PASSWORD || "platterobe2026!";
+const password = process.env.ADMIN_PASSWORD || "";
 
 if (!email || !password) {
   console.error("Error: ADMIN_EMAIL or ADMIN_PASSWORD not configured.");

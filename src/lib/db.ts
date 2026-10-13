@@ -1,4 +1,4 @@
-﻿import Database from "better-sqlite3";
+import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 import bcrypt from "bcryptjs";
@@ -137,7 +137,7 @@ function getDatabase(): Database.Database {
 
     // Provision primary admin account idempotently if not present
     const adminEmail = (process.env.ADMIN_EMAIL || "platterobe@gmail.com").trim().toLowerCase();
-    const adminPassword = process.env.ADMIN_PASSWORD || "platterobe2026!";
+    const adminPassword = process.env.ADMIN_PASSWORD || "";
     const existingAdmin = db.prepare("SELECT * FROM users WHERE LOWER(email) = LOWER(?)").get(adminEmail) as User | undefined;
     if (!existingAdmin) {
       const hash = bcrypt.hashSync(adminPassword, 10);
