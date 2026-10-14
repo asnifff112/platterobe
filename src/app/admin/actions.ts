@@ -127,8 +127,9 @@ export async function toggleProductStatus(id: string, currentlyAvailable: boolea
   toggleProductAvailability(id, newStatus);
 
   revalidatePath("/admin");
-  revalidatePath("/");
-  revalidatePath("/menu");
+  revalidatePath("/", "page");
+  revalidatePath("/menu", "page");
+  revalidatePath("/", "layout");
   return { success: true, available: newStatus };
 }
 
@@ -142,8 +143,9 @@ export async function toggleProductFeaturedStatus(id: string, currentlyFeatured:
   toggleProductFeatured(id, newStatus);
 
   revalidatePath("/admin");
-  revalidatePath("/");
-  revalidatePath("/menu");
+  revalidatePath("/", "page");
+  revalidatePath("/menu", "page");
+  revalidatePath("/", "layout");
   return { success: true, isFeatured: newStatus };
 }
 
@@ -160,8 +162,9 @@ export async function removeProduct(id: string) {
     revalidatePath(`/product/${product.slug}`);
   }
   revalidatePath("/admin");
-  revalidatePath("/");
-  revalidatePath("/menu");
+  revalidatePath("/", "page");
+  revalidatePath("/menu", "page");
+  revalidatePath("/", "layout");
   return { success: true };
 }
 
@@ -396,9 +399,10 @@ export async function upsertProductAction(formData: FormData) {
     }
 
     revalidatePath("/admin");
-    revalidatePath("/");
-    revalidatePath("/menu");
-    revalidatePath(`/product/${slug}`);
+    revalidatePath("/", "page");
+    revalidatePath("/menu", "page");
+    revalidatePath(`/product/${slug}`, "page");
+    revalidatePath("/", "layout");
 
     return { success: true };
   } catch (err: unknown) {

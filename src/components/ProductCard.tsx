@@ -28,7 +28,7 @@ export default function ProductCard({ product }: ProductCardProps) {
       <div className="relative aspect-square w-full rounded-[8px] overflow-hidden bg-[#F8F5E9] mb-2.5 sm:mb-3.5">
         <Image
           src={product.image || "/images/classic-overnight-oats.jpg"}
-          unoptimized={Boolean(product.image?.startsWith("data:"))}
+          unoptimized={Boolean(product.image?.startsWith("data:") || product.image?.startsWith("/uploads/") || product.image?.includes("?v="))}
           alt={`${product.name} — PLATTEROBE`}
           fill
           className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"

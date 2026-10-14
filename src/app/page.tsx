@@ -1,4 +1,8 @@
-﻿import Navbar from "@/components/Navbar";
+export const instant = false;
+
+import { connection } from "next/server";
+
+import Navbar from "@/components/Navbar";
 import Hero from "@/components/Hero";
 import EditorialStatementBanner from "@/components/EditorialStatementBanner";
 import ProductGrid from "@/components/ProductGrid";
@@ -9,7 +13,8 @@ import FinalCTA from "@/components/FinalCTA";
 import Footer from "@/components/Footer";
 import { getAvailableProducts, getFeaturedProducts } from "@/lib/db";
 
-export default function HomePage() {
+export default async function HomePage() {
+  await connection();
   const allProducts = getAvailableProducts();
   const featuredProducts = getFeaturedProducts();
 

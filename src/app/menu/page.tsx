@@ -1,4 +1,8 @@
-﻿import type { Metadata } from "next";
+export const instant = false;
+
+import { connection } from "next/server";
+
+import type { Metadata } from "next";
 import Navbar from "@/components/Navbar";
 import ProductGrid from "@/components/ProductGrid";
 import FinalCTA from "@/components/FinalCTA";
@@ -11,7 +15,8 @@ export const metadata: Metadata = {
     "Browse PLATTEROBE's full menu of fresh, nutritious, and affordable meal platters.",
 };
 
-export default function MenuPage() {
+export default async function MenuPage() {
+  await connection();
   const products = getAvailableProducts();
 
   return (

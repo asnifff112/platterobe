@@ -1,4 +1,8 @@
-﻿import { notFound } from "next/navigation";
+export const instant = false;
+
+import { connection } from "next/server";
+
+import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -14,11 +18,9 @@ type Props = {
   params: Promise<{ slug: string }>;
 };
 
-export async function generateStaticParams() {
-  return getAllProducts().map((p) => ({ slug: p.slug }));
-}
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  await connection();
   const { slug } = await params;
   const product = getProductBySlug(slug);
   if (!product) return {};
@@ -35,6 +37,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function ProductPage({ params }: Props) {
+  await connection();
   const { slug } = await params;
   const product = getProductBySlug(slug);
 
@@ -79,7 +82,7 @@ export default async function ProductPage({ params }: Props) {
               <div className="relative aspect-square w-full rounded-[8px] overflow-hidden bg-[#F8F5E9]">
                 <Image
                   src={product.image || "/images/classic-overnight-oats.jpg"}
-                  unoptimized={Boolean(product.image?.startsWith("data:"))}
+                  unoptimized={Boolean(product.image?.startsWith("data:") || product.image?.startsWith("/uploads/") || product.image?.includes("?v="))}
                   alt={`${product.name} — PLATTEROBE`}
                   fill
                   priority

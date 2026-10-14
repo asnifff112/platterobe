@@ -79,25 +79,28 @@ export async function saveUploadedImage(
   }
 
   // ----------------------------------------------------
-  // TIER 2: Local Filesystem (public/uploads)
+  // TIER 2: Local Filesystem (public/uploads) - only on non-serverless persistent environments
   // ----------------------------------------------------
-  const uploadDir = path.join(process.cwd(), "public", "uploads");
-  try {
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    const filePath = path.join(uploadDir, filename);
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    await fs.promises.writeFile(filePath, buffer);
+  const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+  if (!isServerless) {
+    const uploadDir = path.join(process.cwd(), "public", "uploads");
+    try {
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      const filePath = path.join(uploadDir, filename);
+      const bytes = await file.arrayBuffer();
+      const buffer = Buffer.from(bytes);
+      await fs.promises.writeFile(filePath, buffer);
 
-    return {
-      url: `/uploads/${filename}`,
-      provider: "local-filesystem",
-      size: file.size,
-    };
-  } catch (fsError) {
-    console.warn("Local filesystem write failed (read-only filesystem in serverless); using resilient database storage:", fsError);
+      return {
+        url: `/uploads/${filename}`,
+        provider: "local-filesystem",
+        size: file.size,
+      };
+    } catch (fsError) {
+      console.warn("Local filesystem write failed; falling back to resilient database storage:", fsError);
+    }
   }
 
   // ----------------------------------------------------
