@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
-import type { Product, Ingredient } from "@/data/products";
+import { getProductImageUrl, type Product, type Ingredient } from "@/data/products";
 import { MENU_CATEGORIES, CategoryKey, normalizeCategoryKey } from "@/data/categories";
 import { upsertProductAction } from "@/app/admin/actions";
 import {
@@ -607,10 +607,11 @@ export default function ProductFormModal({
                 </span>
                 <div className="relative w-44 h-36 rounded-[6px] overflow-hidden bg-stone-100 border border-stone-200 shadow-sm">
                   <Image
-                    src={currentSavedImage}
+                    key={currentSavedImage}
+                    src={getProductImageUrl(currentSavedImage, product?.updatedAt)}
                     alt="Current product image"
                     fill
-                    unoptimized={currentSavedImage.startsWith("data:")}
+                    unoptimized={Boolean(currentSavedImage.startsWith("data:") || product?.updatedAt)}
                     className="object-cover"
                   />
                 </div>

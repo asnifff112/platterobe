@@ -13,6 +13,7 @@ import IngredientsList from "@/components/IngredientsList";
 import WhatsAppButton from "@/components/WhatsAppButton";
 import { getProductBySlug, getAllProducts } from "@/lib/db";
 import { getCategoryDisplayName } from "@/data/categories";
+import { getProductImageUrl } from "@/data/products";
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -31,7 +32,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     openGraph: {
       title: `${product.name} | PLATTEROBE`,
       description: product.description,
-      images: [{ url: product.image }],
+      images: [{ url: getProductImageUrl(product.image, product.updatedAt) }],
     },
   };
 }
@@ -42,6 +43,8 @@ export default async function ProductPage({ params }: Props) {
   const product = getProductBySlug(slug);
 
   if (!product) notFound();
+
+  const imageUrl = getProductImageUrl(product.image, product.updatedAt);
 
   const hasDiscount = Boolean(
     product.originalPrice &&
@@ -81,7 +84,8 @@ export default async function ProductPage({ params }: Props) {
             <div className="lg:col-span-6">
               <div className="relative aspect-square w-full rounded-[8px] overflow-hidden bg-[#F8F5E9]">
                 <Image
-                  src={product.image || "/images/classic-overnight-oats.jpg"}
+                  key={`detail-${product.id}-${imageUrl}`}
+                  src={imageUrl}
                   unoptimized={Boolean(product.image?.startsWith("data:") || product.image?.startsWith("/uploads/") || product.image?.includes("?v="))}
                   alt={`${product.name} — PLATTEROBE`}
                   fill

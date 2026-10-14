@@ -186,7 +186,7 @@ export default function ProductGrid({
             className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 sm:gap-x-6 lg:gap-x-8 gap-y-7 sm:gap-y-10 lg:gap-y-12"
           >
             {filteredProducts.map((product) => (
-              <div key={product.id} className="product-card-item">
+              <div key={`card-${product.id}-${product.image}-${product.updatedAt || ""}`} className="product-card-item">
                 <ProductCard product={product} />
               </div>
             ))}

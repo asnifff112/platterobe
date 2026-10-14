@@ -32,6 +32,7 @@ export type Product = {
   category: CategoryKey;
   weight?: string | null;
   sortOrder?: number;
+  updatedAt?: string;
 };
 
 export const products: Product[] = [
@@ -560,4 +561,37 @@ export function getProductsByCategory(category: Product["category"]): Product[] 
 
 export function getAvailableProducts(): Product[] {
   return products.filter((p) => p.available);
+}
+
+
+/**
+ * Generates an authoritative, cache-busting image URL for a product.
+ * If the product was updated, appends a version timestamp parameter (?v=...)
+ * to ensure that browsers, CDNs, and Next.js Image Optimizer immediately
+ * fetch and display the latest saved image without serving stale cached copies.
+ */
+export function getProductImageUrl(
+  image: string | null | undefined,
+  updatedAt?: string
+): string {
+  const baseImage = image || "/images/classic-overnight-oats.jpg";
+  if (baseImage.startsWith("data:")) return baseImage;
+  if (!updatedAt) return baseImage;
+
+  // Normalize SQLite 'YYYY-MM-DD HH:mm:ss' to ISO string 'YYYY-MM-DDTHH:mm:ssZ'
+  const normalizedDateStr =
+    updatedAt.includes(" ") && !updatedAt.includes("T")
+      ? updatedAt.replace(" ", "T") + "Z"
+      : updatedAt;
+
+  const timestamp = new Date(normalizedDateStr).getTime();
+  if (isNaN(timestamp)) {
+    const fallbackHash = updatedAt.replace(/[^a-zA-Z0-9]/g, "");
+    if (!fallbackHash) return baseImage;
+    const sep = baseImage.includes("?") ? "&" : "?";
+    return `${baseImage}${sep}v=${fallbackHash}`;
+  }
+
+  const separator = baseImage.includes("?") ? "&" : "?";
+  return `${baseImage}${separator}v=${timestamp}`;
 }

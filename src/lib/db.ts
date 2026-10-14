@@ -113,6 +113,12 @@ export function getDatabase(): Database.Database {
       if (!colNames.includes("is_featured")) {
         db.exec("ALTER TABLE products ADD COLUMN is_featured INTEGER NOT NULL DEFAULT 0;");
       }
+      if (!colNames.includes("updated_at")) {
+        db.exec("ALTER TABLE products ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'));");
+      }
+      if (!colNames.includes("created_at")) {
+        db.exec("ALTER TABLE products ADD COLUMN created_at TEXT NOT NULL DEFAULT (datetime('now'));");
+      }
 
       // Initialize Schema for Users / Administrators
       db.exec(`
@@ -317,6 +323,7 @@ function mapRowToProduct(row: ProductRow): Product {
     category: normalizeCategoryKey(row.category),
     weight: row.weight || null,
     sortOrder: row.sort_order ?? 0,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -419,7 +426,9 @@ export function createProduct(product: Omit<Product, "id"> & { id?: string }): P
     product.weight ?? ""
   );
 
-  return getProductById(id)!;
+    const created = getProductById(id)!;
+  initialProducts.push(created);
+  return created;
 }
 
 export function updateProduct(id: string, updates: Partial<Product>): Product | undefined {
@@ -473,7 +482,14 @@ export function updateProduct(id: string, updates: Partial<Product>): Product | 
     id
   );
 
-  return getProductById(id);
+    const updatedProduct = getProductById(id);
+  if (updatedProduct) {
+    const idx = initialProducts.findIndex((p) => p.id === id);
+    if (idx !== -1) {
+      initialProducts[idx] = { ...initialProducts[idx], ...updatedProduct };
+    }
+  }
+  return updatedProduct;
 }
 
 export function toggleProductAvailability(id: string, available: boolean): boolean {

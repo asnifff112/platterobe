@@ -1,12 +1,15 @@
 ﻿import Link from "next/link";
 import Image from "next/image";
 import type { Product } from "@/data/products";
+import { getProductImageUrl } from "@/data/products";
 
 interface ProductCardProps {
   product: Product;
 }
 
 export default function ProductCard({ product }: ProductCardProps) {
+  const imageUrl = getProductImageUrl(product.image, product.updatedAt);
+
   const hasDiscount = Boolean(
     product.originalPrice &&
       product.price !== null &&
@@ -27,8 +30,9 @@ export default function ProductCard({ product }: ProductCardProps) {
       {/* 1. Product Image Container */}
       <div className="relative aspect-square w-full rounded-[8px] overflow-hidden bg-[#F8F5E9] mb-2.5 sm:mb-3.5">
         <Image
-          src={product.image || "/images/classic-overnight-oats.jpg"}
-          unoptimized={Boolean(product.image?.startsWith("data:") || product.image?.startsWith("/uploads/") || product.image?.includes("?v="))}
+          key={`${product.id}-${imageUrl}`}
+          src={imageUrl}
+          unoptimized={Boolean(imageUrl.startsWith("data:") || imageUrl.startsWith("/uploads/") || imageUrl.includes("?v="))}
           alt={`${product.name} — PLATTEROBE`}
           fill
           className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"

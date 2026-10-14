@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Product } from "@/data/products";
+import { getProductImageUrl } from "@/data/products";
 import { MENU_CATEGORIES, getCategoryDisplayName, normalizeCategoryKey } from "@/data/categories";
 import { toggleProductStatus, toggleProductFeaturedStatus } from "@/app/admin/actions";
 import ProductFormModal from "./ProductFormModal";
@@ -305,7 +306,8 @@ export default function AdminDashboardClient({
                       <div className="flex items-center gap-3">
                         <div className="relative w-12 h-12 rounded-[6px] overflow-hidden bg-[#F8F5E9] border border-stone-200 shrink-0">
                           <Image
-                            src={item.image || "/images/classic-overnight-oats.jpg"}
+                            key={`admin-${item.id}-${getProductImageUrl(item.image, item.updatedAt)}`}
+                            src={getProductImageUrl(item.image, item.updatedAt)}
                             unoptimized={Boolean(item.image?.startsWith("data:"))}
                             alt={item.name}
                             fill
