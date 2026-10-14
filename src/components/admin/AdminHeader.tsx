@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { logoutAction } from "@/app/admin/actions";
 import { ExternalLink, LogOut, Shield, KeyRound } from "lucide-react";
 import ChangePasswordModal from "./ChangePasswordModal";
@@ -18,9 +19,16 @@ export default function AdminHeader({ username }: { username?: string }) {
             <div className="flex items-center gap-3">
               <Link
                 href="/admin"
-                className="font-heading font-800 text-[16px] md:text-[17px] tracking-[0.08em] uppercase text-[#1E3A2E]"
+                className="flex items-center gap-2 font-heading font-800 text-[16px] md:text-[17px] tracking-[0.08em] uppercase text-[#1E3A2E]"
               >
-                PLATTEROBE
+                <Image
+                  src="/images/logo.png"
+                  alt="PLATTEROBE Logo"
+                  width={28}
+                  height={28}
+                  className="w-7 h-7 object-contain rounded-[6px] shrink-0"
+                />
+                <span>PLATTEROBE</span>
               </Link>
               <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-heading font-bold uppercase tracking-[0.08em] bg-[#1E3A2E]/8 text-[#1E3A2E]">
                 <Shield size={11} className="text-[#6B8F56]" />

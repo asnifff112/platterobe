@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { siteConfig } from "@/config/site";
@@ -49,10 +50,18 @@ export default function Navbar() {
             {/* Brand Logo */}
             <Link
               href="/"
-              className="font-heading font-800 tracking-[0.08em] text-[16px] md:text-[17px] text-[#1E3A2E] uppercase focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A2E] rounded-[4px]"
+              className="flex items-center gap-2.5 font-heading font-800 tracking-[0.08em] text-[16px] md:text-[17px] text-[#1E3A2E] uppercase focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A2E] rounded-[4px] group"
               aria-label="PLATTEROBE — Home"
             >
-              PLATTEROBE
+              <Image
+                src="/images/logo.png"
+                alt="PLATTEROBE Logo"
+                width={36}
+                height={36}
+                className="w-[30px] h-[30px] md:w-[34px] md:h-[34px] object-contain rounded-[7px] shrink-0"
+                priority
+              />
+              <span>PLATTEROBE</span>
             </Link>
 
             {/* Desktop Navigation (No WhatsApp button here) */}
@@ -95,7 +104,19 @@ export default function Navbar() {
         }`}
         aria-hidden={!open}
       >
-        <div className="flex flex-col h-full pt-24 pb-10 px-6">
+        <div className="flex flex-col h-full pt-20 pb-10 px-6">
+          <div className="flex items-center gap-3 mb-6 pb-4 border-b border-stone-200/60">
+            <Image
+              src="/images/logo.png"
+              alt="PLATTEROBE Logo"
+              width={38}
+              height={38}
+              className="w-[38px] h-[38px] object-contain rounded-[8px] shrink-0"
+            />
+            <span className="font-heading font-800 tracking-[0.08em] text-[18px] text-[#1E3A2E] uppercase">
+              PLATTEROBE
+            </span>
+          </div>
           <nav className="flex flex-col" aria-label="Mobile navigation">
             {navLinks.map((link) => (
               <Link

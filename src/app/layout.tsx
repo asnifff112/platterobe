@@ -17,6 +17,15 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  icons: {
+    icon: [
+      { url: "/images/logo.png" },
+      { url: "/favicon.ico" },
+    ],
+    apple: [
+      { url: "/apple-icon.png" },
+    ],
+  },
   metadataBase: new URL("https://platterobe.co"),
   title: {
     default: "PLATTEROBE — Everyday Food, Made Better.",
@@ -32,12 +41,14 @@ export const metadata: Metadata = {
     locale: "en_IN",
     url: "https://platterobe.co",
     siteName: "PLATTEROBE",
+    images: [{ url: "/images/logo.png", width: 512, height: 512, alt: "PLATTEROBE Logo" }],
     title: "PLATTEROBE — Everyday Food, Made Better.",
     description:
       "Fresh, nutritious and affordable meal platters made for everyday living.",
   },
   twitter: {
     card: "summary_large_image",
+    images: ["/images/logo.png"],
     title: "PLATTEROBE — Everyday Food, Made Better.",
     description:
       "Fresh, nutritious and affordable meal platters made for everyday living.",

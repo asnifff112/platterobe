@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { MessageCircle, Phone } from "lucide-react";
 import { siteConfig } from "@/config/site";
 
@@ -35,9 +36,16 @@ export default function Footer() {
           <div className="md:col-span-5">
             <Link
               href="/"
-              className="font-heading font-800 tracking-[0.08em] text-[16px] text-[#1E3A2E] uppercase block mb-3"
+              className="inline-flex items-center gap-2.5 font-heading font-800 tracking-[0.08em] text-[16px] text-[#1E3A2E] uppercase mb-3.5 group"
             >
-              PLATTEROBE
+              <Image
+                src="/images/logo.png"
+                alt="PLATTEROBE Logo"
+                width={32}
+                height={32}
+                className="w-8 h-8 object-contain rounded-[7px] shrink-0"
+              />
+              <span>PLATTEROBE</span>
             </Link>
             <p className="text-[14px] text-[#1A1A1A]/70 font-body leading-relaxed max-w-sm mb-3">
               MORE THAN A MEAL.

@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { loginAction } from "@/app/admin/actions";
 import Link from "next/link";
+import Image from "next/image";
 import { Lock, Mail, ArrowRight, ShieldCheck, Eye, EyeOff, AlertCircle, Loader2 } from "lucide-react";
 
 export default function AdminLoginForm() {
@@ -15,9 +16,18 @@ export default function AdminLoginForm() {
       <div className="text-center mb-8">
         <Link
           href="/"
-          className="font-heading font-800 text-[19px] tracking-[0.1em] uppercase text-[#1E3A2E] inline-block mb-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A2E] rounded"
+          className="inline-flex flex-col items-center gap-2 mb-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A2E] rounded group"
         >
-          PLATTEROBE
+          <Image
+            src="/images/logo.png"
+            alt="PLATTEROBE Logo"
+            width={48}
+            height={48}
+            className="w-12 h-12 object-contain rounded-[10px] shadow-sm"
+          />
+          <span className="font-heading font-800 text-[19px] tracking-[0.1em] uppercase text-[#1E3A2E]">
+            PLATTEROBE
+          </span>
         </Link>
         <p className="text-[11px] tracking-[0.16em] uppercase text-[#6B8F56] font-heading font-semibold">
           Admin Console
