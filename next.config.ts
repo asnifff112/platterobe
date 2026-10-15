@@ -6,7 +6,13 @@ const nextConfig: NextConfig = {
   partialPrefetching: true,
   serverExternalPackages: ["better-sqlite3"],
   images: {
+    localPatterns: [
+      { pathname: "/images/**", search: "" },
+      { pathname: "/uploads/**", search: "" },
+    ],
     remotePatterns: [
+      { protocol: "https", hostname: "rsojkuiouwnotplrebki.supabase.co" },
+      { protocol: "https", hostname: "**.supabase.co" },
       { protocol: "https", hostname: "**.public.blob.vercel-storage.com" },
       { protocol: "https", hostname: "**.vercel-storage.com" },
       { protocol: "https", hostname: "res.cloudinary.com" },

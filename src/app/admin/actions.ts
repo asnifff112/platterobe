@@ -1,4 +1,4 @@
-﻿"use server";
+"use server";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -46,7 +46,7 @@ export async function loginAction(
     return { error: "Please enter your admin email and password." };
   }
 
-  const authResult = verifyAdminCredentials(identifier, password);
+  const authResult = await verifyAdminCredentials(identifier, password);
   if (!authResult.isValid || !authResult.user) {
     return { error: "Invalid admin email or password. Please try again." };
   }
@@ -90,8 +90,8 @@ export async function changePasswordAction(
   }
 
   const user =
-    getUserById(session.userId) ||
-    (session.email ? getUserByEmail(session.email) : undefined);
+    (await getUserById(session.userId)) ||
+    (session.email ? await getUserByEmail(session.email) : undefined);
 
   if (!user) {
     return { error: "Administrator account record not found in database." };
@@ -104,7 +104,7 @@ export async function changePasswordAction(
 
   const saltRounds = 10;
   const newHash = bcrypt.hashSync(newPassword, saltRounds);
-  const updated = updateUserPassword(user.id, newHash);
+  const updated = await updateUserPassword(user.id, newHash);
 
   if (!updated) {
     return { error: "Failed to update password in database." };
@@ -124,7 +124,7 @@ export async function toggleProductStatus(id: string, currentlyAvailable: boolea
   }
 
   const newStatus = !currentlyAvailable;
-  toggleProductAvailability(id, newStatus);
+  await toggleProductAvailability(id, newStatus);
 
   revalidatePath("/admin");
   revalidatePath("/", "page");
@@ -140,7 +140,7 @@ export async function toggleProductFeaturedStatus(id: string, currentlyFeatured:
   }
 
   const newStatus = !currentlyFeatured;
-  toggleProductFeatured(id, newStatus);
+  await toggleProductFeatured(id, newStatus);
 
   revalidatePath("/admin");
   revalidatePath("/", "page");
@@ -155,8 +155,8 @@ export async function removeProduct(id: string) {
     throw new Error("Unauthorized: Administrator permissions required.");
   }
 
-  const product = getProductById(id);
-  deleteProduct(id);
+  const product = await getProductById(id);
+  await deleteProduct(id);
 
   if (product) {
     revalidatePath(`/product/${product.slug}`);
@@ -202,12 +202,12 @@ export async function upsertProductAction(formData: FormData) {
 
     // Slug uniqueness check
     if (!id) {
-      const existingProduct = getProductBySlug(slug);
+      const existingProduct = await getProductBySlug(slug);
       if (existingProduct) {
         return { error: `A product with slug "${slug}" already exists. Please choose a unique name or slug.` };
       }
     } else {
-      const existingProduct = getProductBySlug(slug);
+      const existingProduct = await getProductBySlug(slug);
       if (existingProduct && existingProduct.id !== id) {
         return { error: `Another product with slug "${slug}" already exists. Please choose a different slug.` };
       }
@@ -268,14 +268,11 @@ export async function upsertProductAction(formData: FormData) {
 
     const available = formData.get("available") === "on" || formData.get("available") === "true";
 
-    // Handle Image: allow custom URL, uploaded file, or fallback
+    // Handle Image: allow uploaded file, selected URL, or retain existing image
     const currentImage = (formData.get("currentImage") as string)?.trim() || "";
-    let imagePath =
-      (formData.get("imageUrl") as string)?.trim() ||
-      currentImage ||
-      "/images/classic-overnight-oats.jpg";
-
+    const imageUrl = (formData.get("imageUrl") as string)?.trim() || "";
     const imageFile = formData.get("imageFile") as File | null;
+    let imagePath = imageUrl || currentImage;
 
     if (imageFile && imageFile.size > 0 && typeof imageFile.arrayBuffer === "function") {
       try {
@@ -283,7 +280,7 @@ export async function upsertProductAction(formData: FormData) {
         imagePath = uploadRes.url;
 
         // Safely cleanup old image if replaced and no longer referenced
-        if (currentImage && currentImage !== imagePath) {
+        if (currentImage && currentImage !== imagePath && !currentImage.includes("classic-overnight-oats")) {
           await cleanupOldImageSafely(currentImage, imagePath, id || undefined);
         }
       } catch (uploadErr: unknown) {
@@ -291,6 +288,10 @@ export async function upsertProductAction(formData: FormData) {
         const errorMsg = uploadErr instanceof Error ? uploadErr.message : "Failed to upload image.";
         return { error: errorMsg };
       }
+    }
+
+    if (!id && !imagePath) {
+      return { error: "Please upload or select an image for this new product." };
     }
 
     // Handle Ingredients - accept JSON structured ingredients
@@ -359,7 +360,7 @@ export async function upsertProductAction(formData: FormData) {
     };
 
     if (id) {
-      updateProduct(id, {
+      await updateProduct(id, {
         slug,
         name,
         subtitle,
@@ -378,7 +379,9 @@ export async function upsertProductAction(formData: FormData) {
         sortOrder,
       });
     } else {
-      createProduct({
+      const newId = `prod-${Date.now()}`;
+      await createProduct({
+        id: newId,
         slug,
         name,
         subtitle,

@@ -1,15 +1,14 @@
-﻿import Database from "better-sqlite3";
+import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 import bcrypt from "bcryptjs";
-import { Product, products as initialProducts } from "@/data/products";
-import { normalizeCategoryKey, isValidCategoryKey } from "@/data/categories";
+import { Product, products as initialProducts, Ingredient } from "@/data/products";
+import { normalizeCategoryKey } from "@/data/categories";
+import { getSupabaseAdminClient, isSupabaseConfigured } from "@/lib/supabase";
 
 const DB_DIR = path.join(process.cwd(), "data");
 const SOURCE_DB_PATH = path.join(DB_DIR, "platterobe.db");
 
-// In serverless environments (like Vercel / AWS Lambda), the deployment directory is read-only.
-// We use /tmp which is the designated writable directory in serverless invocations.
 const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 let activeDbPath = SOURCE_DB_PATH;
 
@@ -45,7 +44,6 @@ try {
   // Ignored on read-only filesystem
 }
 
-// Global cached database connection in development to prevent multiple connections
 declare global {
   // eslint-disable-next-line no-var
   var __platterobeDb: Database.Database | undefined;
@@ -58,6 +56,21 @@ export interface User {
   role: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface Order {
+  id: string;
+  customerName?: string;
+  customerPhone?: string;
+  productId?: string;
+  productName: string;
+  quantity: number;
+  unitPrice?: number | null;
+  totalAmount?: number | null;
+  notes?: string;
+  source: string;
+  status: "pending" | "confirmed" | "completed" | "cancelled";
+  createdAt: string;
 }
 
 export function getDatabase(): Database.Database {
@@ -132,12 +145,23 @@ export function getDatabase(): Database.Database {
         );
       `);
 
-      // Safe backward-compatible migration for legacy categories
+      // Initialize Schema for Orders
       db.exec(`
-        UPDATE products SET category = 'breakfast' WHERE category IN ('oats', 'eggs', 'pancake', 'fruit');
-        UPDATE products SET category = 'lunch' WHERE category IN ('sandwich');
-        UPDATE products SET category = 'dinner' WHERE category IN ('pudding');
-        UPDATE products SET category = 'shakes-smoothies' WHERE category IN ('smoothie');
+        CREATE TABLE IF NOT EXISTS orders (
+          id TEXT PRIMARY KEY,
+          customer_name TEXT,
+          customer_phone TEXT,
+          product_id TEXT,
+          product_name TEXT NOT NULL,
+          quantity INTEGER NOT NULL DEFAULT 1,
+          unit_price REAL,
+          total_amount REAL,
+          notes TEXT,
+          source TEXT NOT NULL DEFAULT 'whatsapp',
+          status TEXT NOT NULL DEFAULT 'pending',
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
       `);
 
       // Seed products if empty
@@ -203,63 +227,7 @@ export function getDatabase(): Database.Database {
 }
 
 // ----------------------------------------------------------
-// User Database API
-// ----------------------------------------------------------
-
-export function getUserByEmail(email: string): User | undefined {
-  try {
-    const db = getDatabase();
-    const cleanEmail = (email || "").trim().toLowerCase();
-    if (!cleanEmail) return undefined;
-    const row = db.prepare("SELECT * FROM users WHERE LOWER(email) = LOWER(?)").get(cleanEmail) as User | undefined;
-    return row;
-  } catch (err) {
-    console.error("Error fetching user by email from database:", err);
-    return undefined;
-  }
-}
-
-export function getUserById(id: string): User | undefined {
-  try {
-    const db = getDatabase();
-    const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as User | undefined;
-    return row;
-  } catch (err) {
-    console.error("Error fetching user by id from database:", err);
-    return undefined;
-  }
-}
-
-export function updateUserPassword(id: string, newPasswordHash: string): boolean {
-  try {
-    const db = getDatabase();
-    const res = db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?").run(newPasswordHash, id);
-    return res.changes > 0;
-  } catch (err) {
-    console.error("Error updating user password:", err);
-    return false;
-  }
-}
-
-export function upsertAdminUser(email: string, passwordHash: string): User {
-  const db = getDatabase();
-  const cleanEmail = email.trim().toLowerCase();
-  const existing = getUserByEmail(cleanEmail);
-  if (existing) {
-    db.prepare("UPDATE users SET password_hash = ?, role = 'admin', updated_at = datetime('now') WHERE id = ?").run(passwordHash, existing.id);
-    return getUserById(existing.id)!;
-  } else {
-    const id = "admin-" + Date.now();
-    db.prepare(`
-      INSERT INTO users (id, email, password_hash, role, created_at, updated_at)
-      VALUES (?, ?, ?, 'admin', datetime('now'), datetime('now'))
-    `).run(id, cleanEmail, passwordHash);
-    return getUserById(id)!;
-  }
-}
-
-// ----------------------------------------------------------
-// Products Database API
+// Row Mappers
 // ----------------------------------------------------------
 
 interface ProductRow {
@@ -267,16 +235,18 @@ interface ProductRow {
   slug: string;
   name: string;
   subtitle: string;
-  shortDescription: string;
+  shortDescription?: string;
+  short_description?: string;
   description: string;
-  whyYoullLikeIt: string;
+  whyYoullLikeIt?: string;
+  why_youll_like_it?: string;
   price: number | null;
   original_price: number | null;
-  is_featured: number;
+  is_featured: number | boolean;
   image: string;
-  ingredients: string;
-  nutrition: string;
-  available: number;
+  ingredients: string | Ingredient[];
+  nutrition: string | Record<string, unknown>;
+  available: number | boolean;
   category: string;
   sort_order: number;
   weight?: string;
@@ -285,11 +255,15 @@ interface ProductRow {
 }
 
 function mapRowToProduct(row: ProductRow): Product {
-  let ingredients = [];
-  try {
-    ingredients = JSON.parse(row.ingredients);
-  } catch {
-    ingredients = [];
+  let ingredients: Ingredient[] = [];
+  if (Array.isArray(row.ingredients)) {
+    ingredients = row.ingredients;
+  } else if (typeof row.ingredients === "string") {
+    try {
+      ingredients = JSON.parse(row.ingredients);
+    } catch {
+      ingredients = [];
+    }
   }
 
   let nutrition = {
@@ -299,24 +273,28 @@ function mapRowToProduct(row: ProductRow): Product {
     fat: null,
     fiber: null,
   };
-  try {
-    nutrition = JSON.parse(row.nutrition);
-  } catch {
-    // default
+  if (row.nutrition && typeof row.nutrition === "object") {
+    nutrition = { ...nutrition, ...(row.nutrition as typeof nutrition) };
+  } else if (typeof row.nutrition === "string") {
+    try {
+      nutrition = { ...nutrition, ...JSON.parse(row.nutrition) };
+    } catch {
+      // default
+    }
   }
 
   return {
-    id: row.id,
-    slug: row.slug,
-    name: row.name,
-    subtitle: row.subtitle,
-    shortDescription: row.shortDescription,
-    description: row.description,
-    whyYoullLikeIt: row.whyYoullLikeIt,
-    price: row.price,
-    originalPrice: row.original_price ?? null,
+    id: String(row.id),
+    slug: String(row.slug),
+    name: String(row.name),
+    subtitle: row.subtitle || "",
+    shortDescription: row.short_description || row.shortDescription || "",
+    description: row.description || "",
+    whyYoullLikeIt: row.why_youll_like_it || row.whyYoullLikeIt || "",
+    price: row.price !== null && row.price !== undefined ? Number(row.price) : null,
+    originalPrice: row.original_price !== null && row.original_price !== undefined ? Number(row.original_price) : null,
     isFeatured: Boolean(row.is_featured),
-    image: row.image,
+    image: row.image || "",
     ingredients,
     nutrition,
     available: Boolean(row.available),
@@ -327,29 +305,108 @@ function mapRowToProduct(row: ProductRow): Product {
   };
 }
 
-export function getAllProducts(): Product[] {
+// ----------------------------------------------------------
+// Products Database API (Dual Engine: Supabase PostgreSQL + SQLite)
+// ----------------------------------------------------------
+
+export async function getAllProducts(): Promise<Product[]> {
+  // 1. Try Supabase PostgreSQL if configured
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from("products")
+          .select("*")
+          .order("sort_order", { ascending: true })
+          .order("created_at", { ascending: true });
+
+        if (!error && data && data.length > 0) {
+          return data.map(mapRowToProduct);
+        }
+        if (error) {
+          console.warn("Supabase query error in getAllProducts; using fallback:", error.message);
+        }
+      }
+    } catch (supabaseErr) {
+      console.warn("Supabase exception in getAllProducts:", supabaseErr);
+    }
+  }
+
+  // 2. Fallback to Local SQLite
   try {
     const db = getDatabase();
     const rows = db.prepare("SELECT * FROM products ORDER BY sort_order ASC, created_at ASC").all() as ProductRow[];
     return rows.map(mapRowToProduct);
   } catch (err) {
-    console.error("Error fetching all products from database:", err);
+    console.error("Error fetching all products from SQLite database:", err);
     return initialProducts;
   }
 }
 
-export function getAvailableProducts(): Product[] {
+export async function getAvailableProducts(): Promise<Product[]> {
+  // 1. Try Supabase PostgreSQL if configured
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from("products")
+          .select("*")
+          .eq("available", true)
+          .order("sort_order", { ascending: true })
+          .order("created_at", { ascending: true });
+
+        if (!error && data && data.length > 0) {
+          return data.map(mapRowToProduct);
+        }
+        if (error) {
+          console.warn("Supabase query error in getAvailableProducts; using fallback:", error.message);
+        }
+      }
+    } catch (supabaseErr) {
+      console.warn("Supabase exception in getAvailableProducts:", supabaseErr);
+    }
+  }
+
+  // 2. Fallback to Local SQLite
   try {
     const db = getDatabase();
     const rows = db.prepare("SELECT * FROM products WHERE available = 1 ORDER BY sort_order ASC, created_at ASC").all() as ProductRow[];
     return rows.map(mapRowToProduct);
   } catch (err) {
-    console.error("Error fetching available products from database:", err);
+    console.error("Error fetching available products from SQLite database:", err);
     return initialProducts.filter((p) => p.available);
   }
 }
 
-export function getFeaturedProducts(): Product[] {
+export async function getFeaturedProducts(): Promise<Product[]> {
+  // 1. Try Supabase PostgreSQL if configured
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from("products")
+          .select("*")
+          .eq("is_featured", true)
+          .eq("available", true)
+          .order("sort_order", { ascending: true })
+          .order("created_at", { ascending: true });
+
+        if (!error && data) {
+          return data.map(mapRowToProduct);
+        }
+        if (error) {
+          console.warn("Supabase query error in getFeaturedProducts; using fallback:", error.message);
+        }
+      }
+    } catch (supabaseErr) {
+      console.warn("Supabase exception in getFeaturedProducts:", supabaseErr);
+    }
+  }
+
+  // 2. Fallback to Local SQLite
   try {
     const db = getDatabase();
     const rows = db
@@ -357,45 +414,152 @@ export function getFeaturedProducts(): Product[] {
       .all() as ProductRow[];
     return rows.map(mapRowToProduct);
   } catch (err) {
-    console.error("Error fetching featured products from database:", err);
+    console.error("Error fetching featured products from SQLite database:", err);
     return initialProducts.filter((p) => p.isFeatured && p.available);
   }
 }
 
-export function getProductBySlug(slug: string): Product | undefined {
+export async function getProductBySlug(slug: string): Promise<Product | undefined> {
+  // 1. Try Supabase PostgreSQL if configured
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from("products")
+          .select("*")
+          .eq("slug", slug)
+          .maybeSingle();
+
+        if (!error && data) {
+          return mapRowToProduct(data);
+        }
+      }
+    } catch (supabaseErr) {
+      console.warn("Supabase exception in getProductBySlug:", supabaseErr);
+    }
+  }
+
+  // 2. Fallback to Local SQLite
   try {
     const db = getDatabase();
     const row = db.prepare("SELECT * FROM products WHERE slug = ?").get(slug) as ProductRow | undefined;
     if (!row) return undefined;
     return mapRowToProduct(row);
   } catch (err) {
-    console.error("Error fetching product by slug from database:", err);
+    console.error("Error fetching product by slug from SQLite database:", err);
     return initialProducts.find((p) => p.slug === slug);
   }
 }
 
-export function getProductById(id: string): Product | undefined {
+export async function getProductById(id: string): Promise<Product | undefined> {
+  // 1. Try Supabase PostgreSQL if configured
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from("products")
+          .select("*")
+          .eq("id", id)
+          .maybeSingle();
+
+        if (!error && data) {
+          return mapRowToProduct(data);
+        }
+      }
+    } catch (supabaseErr) {
+      console.warn("Supabase exception in getProductById:", supabaseErr);
+    }
+  }
+
+  // 2. Fallback to Local SQLite
   try {
     const db = getDatabase();
     const row = db.prepare("SELECT * FROM products WHERE id = ?").get(id) as ProductRow | undefined;
     if (!row) return undefined;
     return mapRowToProduct(row);
   } catch (err) {
-    console.error("Error fetching product by id from database:", err);
+    console.error("Error fetching product by id from SQLite database:", err);
     return initialProducts.find((p) => p.id === id);
   }
 }
 
-export function createProduct(product: Omit<Product, "id"> & { id?: string }): Product {
-  const db = getDatabase();
+export async function createProduct(product: Omit<Product, "id"> & { id?: string }): Promise<Product> {
   const id = product.id || String(Date.now());
-  let sortOrder = product.sortOrder;
-  if (sortOrder === undefined || sortOrder === null) {
-    const maxOrder = db.prepare("SELECT MAX(sort_order) as maxOrder FROM products").get() as { maxOrder: number | null };
-    sortOrder = (maxOrder?.maxOrder ?? -1) + 1;
+  const validCategory = normalizeCategoryKey(product.category || "breakfast");
+  const sortOrder = product.sortOrder ?? 0;
+
+  // 1. Create in Supabase if configured
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      if (supabase) {
+        const dbRow = {
+          id,
+          slug: product.slug,
+          name: product.name,
+          subtitle: product.subtitle ?? "",
+          short_description: product.shortDescription ?? "",
+          description: product.description ?? "",
+          why_youll_like_it: product.whyYoullLikeIt ?? "",
+          price: product.price ?? null,
+          original_price: product.originalPrice ?? null,
+          is_featured: Boolean(product.isFeatured),
+          image: product.image || "",
+          ingredients: product.ingredients || [],
+          nutrition: product.nutrition || {},
+          available: product.available !== undefined ? Boolean(product.available) : true,
+          category: validCategory,
+          sort_order: sortOrder,
+          weight: product.weight ?? "",
+          updated_at: new Date().toISOString(),
+        };
+
+        const { data, error } = await supabase
+          .from("products")
+          .insert(dbRow)
+          .select("*")
+          .single();
+
+        if (!error && data) {
+          // Also sync to local SQLite if writable
+          try {
+            const db = getDatabase();
+            db.prepare(`
+              INSERT OR REPLACE INTO products (
+                id, slug, name, subtitle, shortDescription, description, whyYoullLikeIt,
+                price, original_price, is_featured, image, ingredients, nutrition, available, category, sort_order, weight, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            `).run(
+              id, product.slug, product.name, product.subtitle ?? "", product.shortDescription ?? "",
+              product.description ?? "", product.whyYoullLikeIt ?? "", product.price ?? null,
+              product.originalPrice ?? null, product.isFeatured ? 1 : 0, product.image || "",
+              JSON.stringify(product.ingredients || []), JSON.stringify(product.nutrition || {}),
+              product.available ? 1 : 0, validCategory, sortOrder, product.weight ?? ""
+            );
+          } catch {
+            // ignore
+          }
+
+          return mapRowToProduct(data);
+        }
+        if (error) {
+          console.warn("Supabase insert error; saving to local database:", error.message);
+        }
+      }
+    } catch (supabaseErr) {
+      console.warn("Supabase insert exception:", supabaseErr);
+    }
   }
 
-  const validCategory = normalizeCategoryKey(product.category || "breakfast");
+  // 2. Fallback to Local SQLite
+  const db = getDatabase();
+  let computedOrder = sortOrder;
+  if (computedOrder === undefined || computedOrder === null || computedOrder === 0) {
+    const maxOrder = db.prepare("SELECT MAX(sort_order) as maxOrder FROM products").get() as { maxOrder: number | null };
+    computedOrder = (maxOrder?.maxOrder ?? -1) + 1;
+  }
 
   const stmt = db.prepare(`
     INSERT INTO products (
@@ -417,29 +581,93 @@ export function createProduct(product: Omit<Product, "id"> & { id?: string }): P
     product.price ?? null,
     product.originalPrice ?? null,
     product.isFeatured ? 1 : 0,
-    product.image || "/images/classic-overnight-oats.jpg",
+    product.image || "",
     JSON.stringify(product.ingredients || []),
     JSON.stringify(product.nutrition || {}),
     product.available ? 1 : 0,
     validCategory,
-    sortOrder,
+    computedOrder,
     product.weight ?? ""
   );
 
-    const created = getProductById(id)!;
-  initialProducts.push(created);
+  const created = (await getProductById(id))!;
   return created;
 }
 
-export function updateProduct(id: string, updates: Partial<Product>): Product | undefined {
-  const db = getDatabase();
-  const existing = getProductById(id);
+export async function updateProduct(id: string, updates: Partial<Product>): Promise<Product | undefined> {
+  const existing = await getProductById(id);
   if (!existing) return undefined;
 
   const merged = { ...existing, ...updates };
   const validCategory = normalizeCategoryKey(merged.category || "breakfast");
   const sortOrder = merged.sortOrder !== undefined ? merged.sortOrder : (existing.sortOrder ?? 0);
+  const finalImage = merged.image || existing.image || "";
 
+  // 1. Update in Supabase if configured
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      if (supabase) {
+        const dbRow = {
+          slug: merged.slug,
+          name: merged.name,
+          subtitle: merged.subtitle ?? "",
+          short_description: merged.shortDescription ?? "",
+          description: merged.description ?? "",
+          why_youll_like_it: merged.whyYoullLikeIt ?? "",
+          price: merged.price ?? null,
+          original_price: merged.originalPrice ?? null,
+          is_featured: Boolean(merged.isFeatured),
+          image: finalImage,
+          ingredients: merged.ingredients || [],
+          nutrition: merged.nutrition || {},
+          available: merged.available !== undefined ? Boolean(merged.available) : true,
+          category: validCategory,
+          sort_order: sortOrder,
+          weight: merged.weight ?? "",
+          updated_at: new Date().toISOString(),
+        };
+
+        const { data, error } = await supabase
+          .from("products")
+          .update(dbRow)
+          .eq("id", id)
+          .select("*")
+          .single();
+
+        if (!error && data) {
+          // Sync to SQLite
+          try {
+            const db = getDatabase();
+            db.prepare(`
+              UPDATE products SET
+                slug = ?, name = ?, subtitle = ?, shortDescription = ?, description = ?, whyYoullLikeIt = ?,
+                price = ?, original_price = ?, is_featured = ?, image = ?, ingredients = ?, nutrition = ?,
+                available = ?, category = ?, weight = ?, sort_order = ?, updated_at = datetime('now')
+              WHERE id = ?
+            `).run(
+              merged.slug, merged.name, merged.subtitle ?? "", merged.shortDescription ?? "", merged.description ?? "",
+              merged.whyYoullLikeIt ?? "", merged.price ?? null, merged.originalPrice ?? null, merged.isFeatured ? 1 : 0,
+              finalImage, JSON.stringify(merged.ingredients || []),
+              JSON.stringify(merged.nutrition || {}), merged.available ? 1 : 0, validCategory, merged.weight ?? "", sortOrder, id
+            );
+          } catch {
+            // ignore
+          }
+
+          return mapRowToProduct(data);
+        }
+        if (error) {
+          console.warn("Supabase update error; saving to local database:", error.message);
+        }
+      }
+    } catch (supabaseErr) {
+      console.warn("Supabase update exception:", supabaseErr);
+    }
+  }
+
+  // 2. Fallback to Local SQLite
+  const db = getDatabase();
   const stmt = db.prepare(`
     UPDATE products SET
       slug = ?,
@@ -472,7 +700,7 @@ export function updateProduct(id: string, updates: Partial<Product>): Product | 
     merged.price ?? null,
     merged.originalPrice ?? null,
     merged.isFeatured ? 1 : 0,
-    merged.image || "/images/classic-overnight-oats.jpg",
+    finalImage,
     JSON.stringify(merged.ingredients || []),
     JSON.stringify(merged.nutrition || {}),
     merged.available ? 1 : 0,
@@ -482,17 +710,36 @@ export function updateProduct(id: string, updates: Partial<Product>): Product | 
     id
   );
 
-    const updatedProduct = getProductById(id);
-  if (updatedProduct) {
-    const idx = initialProducts.findIndex((p) => p.id === id);
-    if (idx !== -1) {
-      initialProducts[idx] = { ...initialProducts[idx], ...updatedProduct };
-    }
-  }
+  const updatedProduct = await getProductById(id);
   return updatedProduct;
 }
 
-export function toggleProductAvailability(id: string, available: boolean): boolean {
+export async function toggleProductAvailability(id: string, available: boolean): Promise<boolean> {
+  // 1. Supabase
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      if (supabase) {
+        const { error } = await supabase
+          .from("products")
+          .update({ available, updated_at: new Date().toISOString() })
+          .eq("id", id);
+
+        if (!error) {
+          try {
+            getDatabase().prepare("UPDATE products SET available = ?, updated_at = datetime('now') WHERE id = ?").run(available ? 1 : 0, id);
+          } catch {
+            // ignore
+          }
+          return true;
+        }
+      }
+    } catch (err) {
+      console.warn("Supabase toggle availability error:", err);
+    }
+  }
+
+  // 2. SQLite
   try {
     const db = getDatabase();
     const res = db.prepare("UPDATE products SET available = ?, updated_at = datetime('now') WHERE id = ?").run(available ? 1 : 0, id);
@@ -503,7 +750,32 @@ export function toggleProductAvailability(id: string, available: boolean): boole
   }
 }
 
-export function toggleProductFeatured(id: string, isFeatured: boolean): boolean {
+export async function toggleProductFeatured(id: string, isFeatured: boolean): Promise<boolean> {
+  // 1. Supabase
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      if (supabase) {
+        const { error } = await supabase
+          .from("products")
+          .update({ is_featured: isFeatured, updated_at: new Date().toISOString() })
+          .eq("id", id);
+
+        if (!error) {
+          try {
+            getDatabase().prepare("UPDATE products SET is_featured = ?, updated_at = datetime('now') WHERE id = ?").run(isFeatured ? 1 : 0, id);
+          } catch {
+            // ignore
+          }
+          return true;
+        }
+      }
+    } catch (err) {
+      console.warn("Supabase toggle featured error:", err);
+    }
+  }
+
+  // 2. SQLite
   try {
     const db = getDatabase();
     const res = db.prepare("UPDATE products SET is_featured = ?, updated_at = datetime('now') WHERE id = ?").run(isFeatured ? 1 : 0, id);
@@ -514,7 +786,32 @@ export function toggleProductFeatured(id: string, isFeatured: boolean): boolean 
   }
 }
 
-export function deleteProduct(id: string): boolean {
+export async function deleteProduct(id: string): Promise<boolean> {
+  // 1. Supabase
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      if (supabase) {
+        const { error } = await supabase
+          .from("products")
+          .delete()
+          .eq("id", id);
+
+        if (!error) {
+          try {
+            getDatabase().prepare("DELETE FROM products WHERE id = ?").run(id);
+          } catch {
+            // ignore
+          }
+          return true;
+        }
+      }
+    } catch (err) {
+      console.warn("Supabase delete product error:", err);
+    }
+  }
+
+  // 2. SQLite
   try {
     const db = getDatabase();
     const res = db.prepare("DELETE FROM products WHERE id = ?").run(id);
@@ -522,5 +819,361 @@ export function deleteProduct(id: string): boolean {
   } catch (err) {
     console.error("Error deleting product:", err);
     return false;
+  }
+}
+
+// ----------------------------------------------------------
+// User Database API
+// ----------------------------------------------------------
+
+export async function getUserByEmail(email: string): Promise<User | undefined> {
+  const cleanEmail = (email || "").trim().toLowerCase();
+  if (!cleanEmail) return undefined;
+
+  // 1. Supabase
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from("users")
+          .select("*")
+          .ilike("email", cleanEmail)
+          .maybeSingle();
+
+        if (!error && data) {
+          return {
+            id: data.id,
+            email: data.email,
+            password_hash: data.password_hash,
+            role: data.role,
+            created_at: data.created_at,
+            updated_at: data.updated_at,
+          };
+        }
+      }
+    } catch (err) {
+      console.warn("Supabase getUserByEmail error:", err);
+    }
+  }
+
+  // 2. SQLite
+  try {
+    const db = getDatabase();
+    const row = db.prepare("SELECT * FROM users WHERE LOWER(email) = LOWER(?)").get(cleanEmail) as User | undefined;
+    return row;
+  } catch (err) {
+    console.error("Error fetching user by email from SQLite:", err);
+    return undefined;
+  }
+}
+
+export async function getUserById(id: string): Promise<User | undefined> {
+  // 1. Supabase
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from("users")
+          .select("*")
+          .eq("id", id)
+          .maybeSingle();
+
+        if (!error && data) {
+          return {
+            id: data.id,
+            email: data.email,
+            password_hash: data.password_hash,
+            role: data.role,
+            created_at: data.created_at,
+            updated_at: data.updated_at,
+          };
+        }
+      }
+    } catch (err) {
+      console.warn("Supabase getUserById error:", err);
+    }
+  }
+
+  // 2. SQLite
+  try {
+    const db = getDatabase();
+    const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as User | undefined;
+    return row;
+  } catch (err) {
+    console.error("Error fetching user by id from SQLite:", err);
+    return undefined;
+  }
+}
+
+export async function updateUserPassword(id: string, newPasswordHash: string): Promise<boolean> {
+  // 1. Supabase
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      if (supabase) {
+        const { error } = await supabase
+          .from("users")
+          .update({ password_hash: newPasswordHash, updated_at: new Date().toISOString() })
+          .eq("id", id);
+
+        if (!error) {
+          try {
+            getDatabase().prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?").run(newPasswordHash, id);
+          } catch {
+            // ignore
+          }
+          return true;
+        }
+      }
+    } catch (err) {
+      console.warn("Supabase updateUserPassword error:", err);
+    }
+  }
+
+  // 2. SQLite
+  try {
+    const db = getDatabase();
+    const res = db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?").run(newPasswordHash, id);
+    return res.changes > 0;
+  } catch (err) {
+    console.error("Error updating user password:", err);
+    return false;
+  }
+}
+
+export async function upsertAdminUser(email: string, passwordHash: string): Promise<User> {
+  const cleanEmail = email.trim().toLowerCase();
+
+  // 1. Supabase
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      if (supabase) {
+        const { data: existing } = await supabase
+          .from("users")
+          .select("*")
+          .ilike("email", cleanEmail)
+          .maybeSingle();
+
+        if (existing) {
+          const { data, error } = await supabase
+            .from("users")
+            .update({ password_hash: passwordHash, role: "admin", updated_at: new Date().toISOString() })
+            .eq("id", existing.id)
+            .select("*")
+            .single();
+
+          if (!error && data) return data;
+        } else {
+          const id = "admin-" + Date.now();
+          const { data, error } = await supabase
+            .from("users")
+            .insert({
+              id,
+              email: cleanEmail,
+              password_hash: passwordHash,
+              role: "admin",
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .select("*")
+            .single();
+
+          if (!error && data) return data;
+        }
+      }
+    } catch (err) {
+      console.warn("Supabase upsertAdminUser error:", err);
+    }
+  }
+
+  // 2. SQLite
+  const db = getDatabase();
+  const existing = await getUserByEmail(cleanEmail);
+  if (existing) {
+    db.prepare("UPDATE users SET password_hash = ?, role = 'admin', updated_at = datetime('now') WHERE id = ?").run(passwordHash, existing.id);
+    return (await getUserById(existing.id))!;
+  } else {
+    const id = "admin-" + Date.now();
+    db.prepare(`
+      INSERT INTO users (id, email, password_hash, role, created_at, updated_at)
+      VALUES (?, ?, ?, 'admin', datetime('now'), datetime('now'))
+    `).run(id, cleanEmail, passwordHash);
+    return (await getUserById(id))!;
+  }
+}
+
+// ----------------------------------------------------------
+// Orders Database API
+// ----------------------------------------------------------
+
+export async function createOrder(order: {
+  customerName?: string;
+  customerPhone?: string;
+  productId?: string;
+  productName: string;
+  quantity?: number;
+  unitPrice?: number | null;
+  totalAmount?: number | null;
+  notes?: string;
+  source?: string;
+}): Promise<Order> {
+  const id = "order-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6);
+  const now = new Date().toISOString();
+  const quantity = order.quantity || 1;
+  const unitPrice = order.unitPrice ?? null;
+  const totalAmount = order.totalAmount ?? (unitPrice !== null ? unitPrice * quantity : null);
+
+  // 1. Supabase
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from("orders")
+          .insert({
+            id,
+            customer_name: order.customerName || null,
+            customer_phone: order.customerPhone || null,
+            product_id: order.productId || null,
+            product_name: order.productName,
+            quantity,
+            unit_price: unitPrice,
+            total_amount: totalAmount,
+            notes: order.notes || null,
+            source: order.source || "whatsapp",
+            status: "pending",
+            created_at: now,
+            updated_at: now,
+          })
+          .select("*")
+          .single();
+
+        if (!error && data) {
+          return {
+            id: data.id,
+            customerName: data.customer_name,
+            customerPhone: data.customer_phone,
+            productId: data.product_id,
+            productName: data.product_name,
+            quantity: data.quantity,
+            unitPrice: data.unit_price,
+            totalAmount: data.total_amount,
+            notes: data.notes,
+            source: data.source,
+            status: data.status,
+            createdAt: data.created_at,
+          };
+        }
+      }
+    } catch (err) {
+      console.warn("Supabase createOrder error:", err);
+    }
+  }
+
+  // 2. SQLite
+  const db = getDatabase();
+  db.prepare(`
+    INSERT INTO orders (
+      id, customer_name, customer_phone, product_id, product_name,
+      quantity, unit_price, total_amount, notes, source, status, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), datetime('now'))
+  `).run(
+    id,
+    order.customerName || null,
+    order.customerPhone || null,
+    order.productId || null,
+    order.productName,
+    quantity,
+    unitPrice,
+    totalAmount,
+    order.notes || null,
+    order.source || "whatsapp"
+  );
+
+  return {
+    id,
+    customerName: order.customerName,
+    customerPhone: order.customerPhone,
+    productId: order.productId,
+    productName: order.productName,
+    quantity,
+    unitPrice,
+    totalAmount,
+    notes: order.notes,
+    source: order.source || "whatsapp",
+    status: "pending",
+    createdAt: now,
+  };
+}
+
+export async function getAllOrders(): Promise<Order[]> {
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from("orders")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (!error && data) {
+          return data.map((d) => ({
+            id: d.id,
+            customerName: d.customer_name,
+            customerPhone: d.customer_phone,
+            productId: d.product_id,
+            productName: d.product_name,
+            quantity: d.quantity,
+            unitPrice: d.unit_price,
+            totalAmount: d.total_amount,
+            notes: d.notes,
+            source: d.source,
+            status: d.status,
+            createdAt: d.created_at,
+          }));
+        }
+      }
+    } catch (err) {
+      console.warn("Supabase getAllOrders error:", err);
+    }
+  }
+
+  try {
+    const db = getDatabase();
+    const rows = db.prepare("SELECT * FROM orders ORDER BY created_at DESC").all() as Array<{
+      id: string;
+      customer_name?: string;
+      customer_phone?: string;
+      product_id?: string;
+      product_name: string;
+      quantity: number;
+      unit_price?: number;
+      total_amount?: number;
+      notes?: string;
+      source: string;
+      status: "pending" | "confirmed" | "completed" | "cancelled";
+      created_at: string;
+    }>;
+
+    return rows.map((r) => ({
+      id: r.id,
+      customerName: r.customer_name,
+      customerPhone: r.customer_phone,
+      productId: r.product_id,
+      productName: r.product_name,
+      quantity: r.quantity,
+      unitPrice: r.unit_price,
+      totalAmount: r.total_amount,
+      notes: r.notes,
+      source: r.source,
+      status: r.status,
+      createdAt: r.created_at,
+    }));
+  } catch (err) {
+    console.error("Error fetching orders:", err);
+    return [];
   }
 }

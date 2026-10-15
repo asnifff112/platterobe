@@ -13,11 +13,9 @@ import {
   Trash2,
   ArrowUp,
   ArrowDown,
-  Star,
-  CheckCircle2,
   AlertCircle,
-  Eye,
   RotateCcw,
+  ImageIcon,
 } from "lucide-react";
 
 interface ProductFormModalProps {
@@ -35,25 +33,22 @@ interface IngredientRow {
 }
 
 const PRESET_LIBRARY = [
-  { label: "ABC Glow Juice", url: "/images/abc-glow.jpg" },
-  { label: "Classic Oat Jar", url: "/images/classic-overnight-oats.jpg" },
-  { label: "Fruit Oat Jar", url: "/images/fruit-overnight-oats.jpg" },
-  { label: "Chia Cloud / Parfait", url: "/images/chia-banana-pudding.jpg" },
-  { label: "Protein Toast", url: "/images/egg-pb-toast.jpg" },
-  { label: "Peanut Stack", url: "/images/pb-banana-sandwich.jpg" },
-  { label: "Power Duo / Toast", url: "/images/banana-egg.jpg" },
-  { label: "Oat Cakes", url: "/images/pancake.jpg" },
-  { label: "Banana Blend", url: "/images/banana-oats-smoothie.jpg" },
+  { label: "ABC Glow Juice", url: "https://rsojkuiouwnotplrebki.supabase.co/storage/v1/object/public/product-images/abc-glow.jpg" },
+  { label: "Classic Oat Jar", url: "https://rsojkuiouwnotplrebki.supabase.co/storage/v1/object/public/product-images/classic-overnight-oats.jpg" },
+  { label: "Fruit Oat Jar", url: "https://rsojkuiouwnotplrebki.supabase.co/storage/v1/object/public/product-images/fruit-overnight-oats.jpg" },
+  { label: "Chia Cloud / Parfait", url: "https://rsojkuiouwnotplrebki.supabase.co/storage/v1/object/public/product-images/chia-banana-pudding.jpg" },
+  { label: "Protein Toast", url: "https://rsojkuiouwnotplrebki.supabase.co/storage/v1/object/public/product-images/egg-pb-toast.jpg" },
+  { label: "Peanut Stack", url: "https://rsojkuiouwnotplrebki.supabase.co/storage/v1/object/public/product-images/pb-banana-sandwich.jpg" },
+  { label: "Power Duo / Toast", url: "https://rsojkuiouwnotplrebki.supabase.co/storage/v1/object/public/product-images/banana-egg.jpg" },
+  { label: "Oat Cakes", url: "https://rsojkuiouwnotplrebki.supabase.co/storage/v1/object/public/product-images/pancake.jpg" },
+  { label: "Banana Blend", url: "https://rsojkuiouwnotplrebki.supabase.co/storage/v1/object/public/product-images/banana-oats-smoothie.jpg" },
 ];
 
 function parseInitialIngredients(
   rawList?: Array<Ingredient | string>
 ): IngredientRow[] {
   if (!rawList || rawList.length === 0) {
-    return [
-      { id: "row-1", name: "Oats", quantity: "60", unit: "g" },
-      { id: "row-2", name: "Milk", quantity: "150", unit: "ml" },
-    ];
+    return [];
   }
 
   return rawList.map((item, idx) => {
@@ -61,9 +56,9 @@ function parseInitialIngredients(
     if (typeof item === "string") {
       const match = item.match(/^(.*?)\s*[-—:]\s*(.*)$/);
       if (match) {
-        return { rowId, id: rowId, name: match[1].trim(), quantity: match[2].trim(), unit: "" };
+        return { id: rowId, name: match[1].trim(), quantity: match[2].trim(), unit: "" };
       }
-      return { rowId, id: rowId, name: item.trim(), quantity: "", unit: "" };
+      return { id: rowId, name: item.trim(), quantity: "", unit: "" };
     }
 
     let qty = (item.quantity || "").trim();
@@ -99,41 +94,66 @@ export default function ProductFormModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // SECTION A: Basic Information
-  const [name, setName] = useState("");
-  const [slug, setSlug] = useState("");
-  const [category, setCategory] = useState<CategoryKey>("breakfast");
-  const [subtitle, setSubtitle] = useState("");
-  const [shortDescription, setShortDescription] = useState("");
-  const [description, setDescription] = useState("");
-  const [whyYoullLikeIt, setWhyYoullLikeIt] = useState("");
+  const [name, setName] = useState(product?.name || "");
+  const [slug, setSlug] = useState(product?.slug || "");
+  const [category, setCategory] = useState<CategoryKey>(
+    product?.category ? normalizeCategoryKey(product.category) : "breakfast"
+  );
+  const [subtitle, setSubtitle] = useState(product?.subtitle || "");
+  const [shortDescription, setShortDescription] = useState(product?.shortDescription || "");
+  const [description, setDescription] = useState(product?.description || "");
+  const [whyYoullLikeIt, setWhyYoullLikeIt] = useState(product?.whyYoullLikeIt || "");
 
   // SECTION B: Product Image Management
-  const [currentSavedImage, setCurrentSavedImage] = useState("/images/classic-overnight-oats.jpg");
+  const [currentSavedImage, setCurrentSavedImage] = useState(product?.image || "");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [newImagePreview, setNewImagePreview] = useState<string | null>(null);
   const [customImageUrl, setCustomImageUrl] = useState("");
+  const [showLibrary, setShowLibrary] = useState(false);
 
   // SECTION C: Pricing
-  const [price, setPrice] = useState("");
-  const [originalPrice, setOriginalPrice] = useState("");
+  const [price, setPrice] = useState(
+    product?.price !== null && product?.price !== undefined ? String(product.price) : ""
+  );
+  const [originalPrice, setOriginalPrice] = useState(
+    product?.originalPrice !== null && product?.originalPrice !== undefined
+      ? String(product.originalPrice)
+      : ""
+  );
 
   // SECTION D: Nutrition & Weight
-  const [weight, setWeight] = useState("");
-  const [calories, setCalories] = useState("");
-  const [protein, setProtein] = useState("");
-  const [carbs, setCarbs] = useState("");
-  const [fat, setFat] = useState("");
-  const [fiber, setFiber] = useState("");
+  const [weight, setWeight] = useState(product?.weight || "");
+  const [calories, setCalories] = useState(
+    product?.nutrition?.calories ? String(product.nutrition.calories) : ""
+  );
+  const [protein, setProtein] = useState(
+    product?.nutrition?.protein ? String(product.nutrition.protein).replace(/g$/i, "") : ""
+  );
+  const [carbs, setCarbs] = useState(
+    product?.nutrition?.carbs ? String(product.nutrition.carbs).replace(/g$/i, "") : ""
+  );
+  const [fat, setFat] = useState(
+    product?.nutrition?.fat ? String(product.nutrition.fat).replace(/g$/i, "") : ""
+  );
+  const [fiber, setFiber] = useState(
+    product?.nutrition?.fiber ? String(product.nutrition.fiber).replace(/g$/i, "") : ""
+  );
 
   // SECTION E: Ingredients
-  const [ingredients, setIngredients] = useState<IngredientRow[]>([]);
+  const [ingredients, setIngredients] = useState<IngredientRow[]>(
+    parseInitialIngredients(product?.ingredients)
+  );
 
   // SECTION F: Product Settings
-  const [isFeatured, setIsFeatured] = useState(false);
-  const [available, setAvailable] = useState(true);
-  const [sortOrder, setSortOrder] = useState("");
+  const [isFeatured, setIsFeatured] = useState(Boolean(product?.isFeatured));
+  const [available, setAvailable] = useState(
+    product?.available !== undefined ? product.available : true
+  );
+  const [sortOrder, setSortOrder] = useState(
+    product?.sortOrder !== undefined ? String(product.sortOrder) : ""
+  );
 
-  // Synchronize modal state when opened or product changes
+  // Re-synchronize modal state when product prop or modal open state changes
   useEffect(() => {
     if (!isOpen) return;
 
@@ -146,9 +166,9 @@ export default function ProductFormModal({
       setDescription(product.description || "");
       setWhyYoullLikeIt(product.whyYoullLikeIt || "");
 
-      const activeImage = product.image || "/images/classic-overnight-oats.jpg";
+      const activeImage = product.image || "";
       setCurrentSavedImage(activeImage);
-      setCustomImageUrl(activeImage);
+      setCustomImageUrl("");
       setSelectedFile(null);
       setNewImagePreview(null);
 
@@ -172,7 +192,7 @@ export default function ProductFormModal({
       setAvailable(product.available !== undefined ? product.available : true);
       setSortOrder(product.sortOrder !== undefined ? String(product.sortOrder) : "");
     } else {
-      // New product defaults
+      // Clean initialization for Add New Product: everything starts empty
       setName("");
       setSlug("");
       setCategory("breakfast");
@@ -181,10 +201,11 @@ export default function ProductFormModal({
       setDescription("");
       setWhyYoullLikeIt("");
 
-      setCurrentSavedImage("/images/classic-overnight-oats.jpg");
-      setCustomImageUrl("/images/classic-overnight-oats.jpg");
+      setCurrentSavedImage("");
+      setCustomImageUrl("");
       setSelectedFile(null);
       setNewImagePreview(null);
+      setShowLibrary(false);
 
       setPrice("");
       setOriginalPrice("");
@@ -196,10 +217,7 @@ export default function ProductFormModal({
       setFat("");
       setFiber("");
 
-      setIngredients([
-        { id: "row-1", name: "", quantity: "", unit: "g" },
-        { id: "row-2", name: "", quantity: "", unit: "g" },
-      ]);
+      setIngredients([]);
 
       setIsFeatured(false);
       setAvailable(true);
@@ -207,6 +225,15 @@ export default function ProductFormModal({
     }
     setError(null);
   }, [product, isOpen]);
+
+  // Clean up any blob preview URLs on unmount
+  useEffect(() => {
+    return () => {
+      if (newImagePreview) {
+        URL.revokeObjectURL(newImagePreview);
+      }
+    };
+  }, [newImagePreview]);
 
   if (!isOpen) return null;
 
@@ -222,13 +249,13 @@ export default function ProductFormModal({
     }
   }
 
-  // Handle image replacement from file picker
+  // Handle image selection from file picker
   function handleImageFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      setError("Selected image exceeds 10MB limit. Please choose a smaller photo.");
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Selected image exceeds 5MB limit. Please choose a smaller photo.");
       return;
     }
 
@@ -238,9 +265,14 @@ export default function ProductFormModal({
       return;
     }
 
+    if (newImagePreview) {
+      URL.revokeObjectURL(newImagePreview);
+    }
+
     setSelectedFile(file);
     const previewUrl = URL.createObjectURL(file);
     setNewImagePreview(previewUrl);
+    setCustomImageUrl(""); // Clear any preset selection
     setError(null);
   }
 
@@ -257,8 +289,13 @@ export default function ProductFormModal({
 
   function handleSelectPresetImage(url: string) {
     handleRevertSelectedImage();
-    setCurrentSavedImage(url);
     setCustomImageUrl(url);
+    setError(null);
+  }
+
+  function handleClearImageSelection() {
+    handleRevertSelectedImage();
+    setCustomImageUrl("");
   }
 
   // Dynamic ingredient handlers
@@ -281,12 +318,7 @@ export default function ProductFormModal({
   }
 
   function handleRemoveIngredient(id: string) {
-    setIngredients((prev) => {
-      if (prev.length <= 1) {
-        return [{ id: `row-${Date.now()}`, name: "", quantity: "", unit: "g" }];
-      }
-      return prev.filter((row) => row.id !== id);
-    });
+    setIngredients((prev) => prev.filter((row) => row.id !== id));
   }
 
   function handleMoveIngredient(index: number, direction: "up" | "down") {
@@ -337,6 +369,13 @@ export default function ProductFormModal({
         }
       }
 
+      // Validate that an image is provided when adding a new product
+      if (!isEditing && !selectedFile && !customImageUrl.trim() && !currentSavedImage.trim()) {
+        setError("Please upload an image from your computer or choose an image for this product.");
+        setLoading(false);
+        return;
+      }
+
       const fd = new FormData();
       if (product?.id) {
         fd.append("id", product.id);
@@ -371,7 +410,9 @@ export default function ProductFormModal({
       if (sortOrder.trim()) fd.append("sortOrder", sortOrder.trim());
 
       // Image Management
-      fd.append("currentImage", currentSavedImage);
+      if (currentSavedImage.trim()) {
+        fd.append("currentImage", currentSavedImage.trim());
+      }
       if (selectedFile) {
         fd.append("imageFile", selectedFile);
       } else if (customImageUrl.trim()) {
@@ -409,7 +450,7 @@ export default function ProductFormModal({
     }
   }
 
-  const effectivePreviewImage = newImagePreview || currentSavedImage;
+  const activeDisplayImage = newImagePreview || customImageUrl || (isEditing ? currentSavedImage : "");
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
@@ -429,7 +470,7 @@ export default function ProductFormModal({
               )}
             </div>
             <h2 className="text-[20px] sm:text-[22px] font-heading font-bold text-[#1E3A2E] leading-tight">
-              {isEditing ? `Edit "${product?.name}"` : "Add New Breakfast Platter"}
+              {isEditing ? `Edit "${product?.name}"` : "Add New Platter"}
             </h2>
           </div>
           <button
@@ -458,7 +499,7 @@ export default function ProductFormModal({
               <h3 className="text-[13px] font-heading font-bold uppercase tracking-[0.08em] text-[#1E3A2E]">
                 Section A — Basic Information
               </h3>
-              <span className="text-[11px] text-stone-500 font-medium">Core Catalog Details</span>
+              <span className="text-[11px] text-stone-500 font-medium">Public Identifiers</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -471,26 +512,23 @@ export default function ProductFormModal({
                   required
                   value={name}
                   onChange={(e) => handleNameChange(e.target.value)}
-                  placeholder="e.g. Oat Jar, ABC Glow..."
+                  placeholder="e.g. Classic Oat Jar"
                   className="w-full px-3.5 py-2.5 text-[14px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
                 />
               </div>
 
               <div>
                 <label className="block text-[12px] font-heading font-semibold uppercase tracking-[0.06em] text-[#1E3A2E] mb-1.5">
-                  Product Slug / URL Path *
+                  URL Slug (Auto-generated) *
                 </label>
                 <input
                   type="text"
                   required
                   value={slug}
                   onChange={(e) => setSlug(e.target.value)}
-                  placeholder="e.g. oat-jar, abc-glow"
-                  className="w-full px-3.5 py-2.5 text-[14px] font-mono bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
+                  placeholder="e.g. classic-oat-jar"
+                  className="w-full px-3.5 py-2.5 text-[14px] font-mono bg-stone-50 border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
                 />
-                <p className="text-[11px] text-stone-500 mt-1">
-                  Public URL: /product/{slug || "slug"}
-                </p>
               </div>
             </div>
 
@@ -576,17 +614,13 @@ export default function ProductFormModal({
                   Section B — Product Image Management
                 </h3>
                 <span className="px-2 py-0.5 bg-[#6B8F56]/15 text-[#1E3A2E] text-[10px] font-heading font-bold uppercase rounded">
-                  Live Preview
+                  Supabase Storage
                 </span>
               </div>
               <span className="text-[11px] text-stone-500">
-                Persistent Storage Integration
+                5 MB Limit · JPG, PNG, WebP
               </span>
             </div>
-
-            <p className="text-[12px] text-stone-600 leading-relaxed">
-              Upload a new photo from your computer to replace the current image. The file will be stored securely in persistent storage and immediately updated across the menu, homepage showcase, and product pages.
-            </p>
 
             {/* Hidden File Input */}
             <input
@@ -597,145 +631,218 @@ export default function ProductFormModal({
               className="hidden"
             />
 
-            {/* Side-by-Side Image Comparison / Preview */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
-              
-              {/* Box 1: Currently Saved Product Image */}
-              <div className="p-3.5 bg-white border border-stone-200 rounded-[8px] flex flex-col items-center">
-                <span className="text-[11px] font-heading font-semibold uppercase tracking-[0.06em] text-stone-500 mb-2">
-                  1. Current Saved Image
-                </span>
-                <div className="relative w-44 h-36 rounded-[6px] overflow-hidden bg-stone-100 border border-stone-200 shadow-sm">
-                  <Image
-                    key={currentSavedImage}
-                    src={getProductImageUrl(currentSavedImage, product?.updatedAt)}
-                    alt="Current product image"
-                    fill
-                    unoptimized={Boolean(currentSavedImage.startsWith("data:") || product?.updatedAt)}
-                    className="object-cover"
-                  />
-                </div>
-                <p className="text-[10px] font-mono text-stone-500 truncate max-w-[200px] mt-2">
-                  {currentSavedImage}
-                </p>
-              </div>
-
-              {/* Box 2: Newly Selected Replacement Image Preview */}
-              <div className={`p-3.5 rounded-[8px] border flex flex-col items-center transition-all ${
-                selectedFile
-                  ? "bg-emerald-50/60 border-emerald-300"
-                  : "bg-white border-dashed border-stone-300 text-stone-400"
-              }`}>
-                <span className={`text-[11px] font-heading font-semibold uppercase tracking-[0.06em] mb-2 ${
-                  selectedFile ? "text-emerald-800" : "text-stone-500"
-                }`}>
-                  {selectedFile ? "2. New Image Preview (Unsaved)" : "2. Replacement Preview"}
-                </span>
-
-                {newImagePreview ? (
-                  <>
-                    <div className="relative w-44 h-36 rounded-[6px] overflow-hidden bg-stone-100 border-2 border-emerald-500 shadow-sm">
+            {/* MODE 1: EDITING AN EXISTING PRODUCT */}
+            {isEditing && currentSavedImage ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+                  {/* Box 1: Currently Saved Product Image */}
+                  <div className="p-3.5 bg-white border border-stone-200 rounded-[8px] flex flex-col items-center">
+                    <span className="text-[11px] font-heading font-semibold uppercase tracking-[0.06em] text-stone-500 mb-2">
+                      Current Saved Image
+                    </span>
+                    <div className="relative w-44 h-36 rounded-[6px] overflow-hidden bg-stone-100 border border-stone-200 shadow-sm">
                       <Image
-                        src={newImagePreview}
-                        alt="Replacement preview"
+                        key={currentSavedImage}
+                        src={getProductImageUrl(currentSavedImage, product?.updatedAt)}
+                        alt="Current product image"
                         fill
+                        sizes="176px"
+                        unoptimized={Boolean(currentSavedImage.startsWith("data:") || currentSavedImage.includes("?v="))}
+                        className="object-cover"
+                      />
+                    </div>
+                    <p className="text-[10px] font-mono text-stone-500 truncate max-w-[200px] mt-2">
+                      {currentSavedImage}
+                    </p>
+                  </div>
+
+                  {/* Box 2: Newly Selected Replacement Image Preview */}
+                  <div className={`p-3.5 rounded-[8px] border flex flex-col items-center transition-all ${
+                    selectedFile || customImageUrl
+                      ? "bg-emerald-50/60 border-emerald-300"
+                      : "bg-white border-dashed border-stone-300 text-stone-400"
+                  }`}>
+                    <span className={`text-[11px] font-heading font-semibold uppercase tracking-[0.06em] mb-2 ${
+                      selectedFile || customImageUrl ? "text-emerald-800" : "text-stone-500"
+                    }`}>
+                      {selectedFile || customImageUrl ? "Replacement Preview (Unsaved)" : "Replacement Preview"}
+                    </span>
+
+                    {newImagePreview ? (
+                      <>
+                        <div className="relative w-44 h-36 rounded-[6px] overflow-hidden bg-stone-100 border-2 border-emerald-500 shadow-sm">
+                          <Image
+                            src={newImagePreview}
+                            alt="Replacement preview"
+                            fill
+                            sizes="176px"
+                            unoptimized
+                            className="object-cover"
+                          />
+                        </div>
+                        <div className="mt-2 text-center">
+                          <p className="text-[11px] font-semibold text-emerald-800 truncate max-w-[200px]">
+                            {selectedFile?.name}
+                          </p>
+                          <p className="text-[10px] text-stone-500">
+                            {selectedFile?.size ? `${Math.round(selectedFile.size / 1024)} KB` : ""} · Ready to save
+                          </p>
+                        </div>
+                      </>
+                    ) : customImageUrl ? (
+                      <>
+                        <div className="relative w-44 h-36 rounded-[6px] overflow-hidden bg-stone-100 border-2 border-emerald-500 shadow-sm">
+                          <Image
+                            src={customImageUrl}
+                            alt="Library preview"
+                            fill
+                            sizes="176px"
+                            unoptimized
+                            className="object-cover"
+                          />
+                        </div>
+                        <p className="text-[10px] text-emerald-800 font-mono truncate max-w-[200px] mt-2">
+                          From Editorial Library
+                        </p>
+                      </>
+                    ) : (
+                      <div className="w-44 h-36 rounded-[6px] border border-dashed border-stone-300 flex flex-col items-center justify-center p-3 text-center">
+                        <Upload size={22} className="text-stone-400 mb-1" />
+                        <span className="text-[11px] text-stone-500 font-medium">
+                          No replacement chosen yet
+                        </span>
+                        <span className="text-[10px] text-stone-400 mt-0.5">
+                          Click &quot;Replace Image&quot; below
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-[#1E3A2E] text-white rounded-[6px] text-[12px] font-heading font-semibold uppercase tracking-[0.04em] hover:bg-[#162d22] transition-colors shadow-sm"
+                  >
+                    <RefreshCw size={14} />
+                    <span>Replace Image from Computer</span>
+                  </button>
+
+                  {(selectedFile || customImageUrl) && (
+                    <button
+                      type="button"
+                      onClick={handleClearImageSelection}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-[12px] font-body text-stone-600 hover:text-red-700 hover:bg-red-50 rounded-[6px] transition-colors"
+                    >
+                      <RotateCcw size={13} />
+                      <span>Revert to Current</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* MODE 2: ADDING A NEW PRODUCT - CLEAN EMPTY PLACEHOLDER */
+              <div className="space-y-3">
+                {activeDisplayImage ? (
+                  <div className="p-4 bg-white border border-emerald-300 rounded-[8px] flex flex-col sm:flex-row items-center gap-4">
+                    <div className="relative w-36 h-28 rounded-[6px] overflow-hidden bg-stone-100 border border-stone-200 shadow-sm shrink-0">
+                      <Image
+                        src={activeDisplayImage}
+                        alt="Selected new product image"
+                        fill
+                        sizes="144px"
                         unoptimized
                         className="object-cover"
                       />
                     </div>
-                    <div className="mt-2 text-center">
-                      <p className="text-[11px] font-semibold text-emerald-800 truncate max-w-[200px]">
-                        {selectedFile?.name}
+                    <div className="flex-1 text-center sm:text-left">
+                      <div className="flex items-center gap-1.5 justify-center sm:justify-start">
+                        <span className="text-[12px] font-heading font-bold text-emerald-800">
+                          {selectedFile ? "Local File Ready to Upload" : "Library Image Selected"}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-stone-600 truncate max-w-sm mt-0.5">
+                        {selectedFile?.name || customImageUrl}
                       </p>
-                      <p className="text-[10px] text-stone-500">
-                        {selectedFile?.size ? `${Math.round(selectedFile.size / 1024)} KB` : ""} · Ready to save
-                      </p>
+                      {selectedFile?.size && (
+                        <p className="text-[10px] text-stone-400 mt-0.5">
+                          Size: {Math.round(selectedFile.size / 1024)} KB
+                        </p>
+                      )}
+                      <div className="flex items-center gap-2 mt-2.5 justify-center sm:justify-start">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="px-2.5 py-1 text-[11px] font-semibold bg-stone-100 hover:bg-stone-200 text-stone-700 rounded border border-stone-300 transition-colors"
+                        >
+                          Change Photo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleClearImageSelection}
+                          className="px-2.5 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50 rounded transition-colors"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
-                  </>
+                  </div>
                 ) : (
-                  <div className="w-44 h-36 rounded-[6px] border border-dashed border-stone-300 flex flex-col items-center justify-center p-3 text-center">
-                    <Upload size={22} className="text-stone-400 mb-1" />
-                    <span className="text-[11px] text-stone-500 font-medium">
-                      No new file chosen yet
-                    </span>
-                    <span className="text-[10px] text-stone-400 mt-0.5">
-                      Click &quot;Replace Image&quot; below
-                    </span>
+                  /* EMPTY PLACEHOLDER: "No image selected" */
+                  <div className="w-full py-8 px-4 rounded-[8px] border-2 border-dashed border-stone-300 bg-white flex flex-col items-center justify-center text-center">
+                    <div className="w-12 h-12 rounded-full bg-stone-100 flex items-center justify-center text-stone-400 mb-2">
+                      <ImageIcon size={24} />
+                    </div>
+                    <p className="text-[13px] font-heading font-semibold text-stone-700">
+                      No image selected
+                    </p>
+                    <p className="text-[11px] text-stone-500 max-w-sm mt-0.5 mb-3.5">
+                      Upload an image file from your computer (JPG, PNG, WebP up to 5MB)
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-[#1E3A2E] text-white rounded-[6px] text-[12px] font-heading font-semibold uppercase tracking-[0.04em] hover:bg-[#162d22] transition-colors shadow-sm"
+                    >
+                      <Upload size={14} />
+                      <span>Upload Image from Computer</span>
+                    </button>
                   </div>
                 )}
               </div>
-            </div>
+            )}
 
-            {/* Action Buttons: Replace Image & Upload New Image */}
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#1E3A2E] text-white rounded-[6px] text-[13px] font-heading font-semibold uppercase tracking-[0.04em] hover:bg-[#162d22] transition-colors shadow-sm"
-              >
-                <RefreshCw size={15} />
-                <span>Replace Image</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-stone-300 text-stone-700 rounded-[6px] text-[13px] font-heading font-semibold uppercase tracking-[0.04em] hover:bg-stone-50 hover:border-stone-400 transition-colors"
-              >
-                <Upload size={15} />
-                <span>Upload New Image</span>
-              </button>
-
-              {selectedFile && (
-                <button
-                  type="button"
-                  onClick={handleRevertSelectedImage}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 text-[12px] font-body text-stone-600 hover:text-red-700 hover:bg-red-50 rounded-[6px] transition-colors"
-                >
-                  <RotateCcw size={13} />
-                  <span>Revert to Current</span>
-                </button>
-              )}
-            </div>
-
-            {/* Preset Photography Library */}
+            {/* Optional Editorial Library Selector */}
             <div className="pt-2 border-t border-stone-200/80">
-              <span className="block text-[11px] font-heading font-semibold uppercase tracking-[0.05em] text-stone-500 mb-2">
-                Quick Select from Editorial Library:
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {PRESET_LIBRARY.map((preset) => (
-                  <button
-                    key={preset.url}
-                    type="button"
-                    onClick={() => handleSelectPresetImage(preset.url)}
-                    className={`px-2.5 py-1 text-[11px] font-body rounded-[4px] border transition-colors ${
-                      currentSavedImage === preset.url && !selectedFile
-                        ? "bg-[#1E3A2E] text-white border-[#1E3A2E] font-medium"
-                        : "bg-white text-stone-700 border-stone-200 hover:border-stone-400"
-                    }`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+              <button
+                type="button"
+                onClick={() => setShowLibrary((prev) => !prev)}
+                className="text-[11px] font-heading font-semibold uppercase tracking-[0.05em] text-[#1E3A2E] hover:underline flex items-center gap-1.5"
+              >
+                <span>{showLibrary ? "▲ Hide Editorial Library" : "▼ Or select from Editorial Photo Library (Optional)"}</span>
+              </button>
 
-            {/* Custom Image URL Option */}
-            <div className="pt-2">
-              <label className="block text-[11px] font-heading font-semibold uppercase tracking-[0.05em] text-stone-500 mb-1">
-                Custom Image URL or Path
-              </label>
-              <input
-                type="text"
-                value={customImageUrl}
-                onChange={(e) => {
-                  setCustomImageUrl(e.target.value);
-                  setCurrentSavedImage(e.target.value);
-                }}
-                placeholder="/images/abc-glow.jpg or https://..."
-                className="w-full px-3 py-2 text-[12px] font-mono bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
-              />
+              {showLibrary && (
+                <div className="mt-2.5 pt-2 border-t border-stone-200/60">
+                  <div className="flex flex-wrap gap-1.5">
+                    {PRESET_LIBRARY.map((preset) => (
+                      <button
+                        key={preset.url}
+                        type="button"
+                        onClick={() => handleSelectPresetImage(preset.url)}
+                        className={`px-2.5 py-1 text-[11px] font-body rounded-[4px] border transition-colors ${
+                          customImageUrl === preset.url
+                            ? "bg-[#1E3A2E] text-white border-[#1E3A2E] font-medium"
+                            : "bg-white text-stone-700 border-stone-200 hover:border-stone-400"
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -770,7 +877,7 @@ export default function ProductFormModal({
                     className="w-full pl-8 pr-3.5 py-2.5 text-[15px] font-heading font-bold text-[#1E3A2E] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
                   />
                 </div>
-                <p className="text-[11px] text-stone-500 mt-1">Official selling price charged on order</p>
+                <p className="text-[11px] text-stone-500 mt-1">Active customer price charged on order</p>
               </div>
 
               <div>
@@ -791,7 +898,7 @@ export default function ProductFormModal({
                     className="w-full pl-8 pr-3.5 py-2.5 text-[15px] font-heading text-stone-600 bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
                   />
                 </div>
-                <p className="text-[11px] text-stone-500 mt-1">Shows strikethrough price with &quot;Save %&quot; badge</p>
+                <p className="text-[11px] text-stone-500 mt-1">Optional higher price for &quot;Save %&quot; badge</p>
               </div>
             </div>
           </div>
@@ -804,7 +911,7 @@ export default function ProductFormModal({
               <h3 className="text-[13px] font-heading font-bold uppercase tracking-[0.08em] text-[#1E3A2E]">
                 Section D — Nutrition & Serving Size
               </h3>
-              <span className="text-[11px] text-stone-500 font-medium">Calculated Recipe Macros</span>
+              <span className="text-[11px] text-stone-500 font-medium">Independent Recipe Macros</span>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
@@ -849,7 +956,7 @@ export default function ProductFormModal({
 
               <div>
                 <label className="block text-[11px] font-heading font-semibold uppercase text-stone-600 mb-1">
-                  Carbs (opt)
+                  Carbs (g)
                 </label>
                 <input
                   type="text"
@@ -862,7 +969,7 @@ export default function ProductFormModal({
 
               <div>
                 <label className="block text-[11px] font-heading font-semibold uppercase text-stone-600 mb-1">
-                  Fat (opt)
+                  Fat (g)
                 </label>
                 <input
                   type="text"
@@ -889,87 +996,87 @@ export default function ProductFormModal({
             </div>
 
             <p className="text-[12px] text-stone-600 leading-relaxed">
-              Add, edit, remove, or reorder ingredients. These records are stored in structured database columns and displayed on the public product details page (e.g. <em>&quot;Oats — 60g&quot;</em>).
+              Add recipe ingredients individually with their exact quantities. Saved directly to the product record and displayed on the product page.
             </p>
 
             <div className="space-y-2.5">
-              {ingredients.map((ing, idx) => (
-                <div
-                  key={ing.id}
-                  className="flex items-center gap-2 p-2.5 bg-stone-50/70 border border-stone-200 rounded-[8px]"
-                >
-                  {/* Reorder controls */}
-                  <div className="flex flex-col gap-0.5 shrink-0">
-                    <button
-                      type="button"
-                      disabled={idx === 0}
-                      onClick={() => handleMoveIngredient(idx, "up")}
-                      className="p-1 text-stone-400 hover:text-stone-700 disabled:opacity-30 disabled:pointer-events-none rounded hover:bg-stone-200"
-                      title="Move up"
-                    >
-                      <ArrowUp size={12} />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={idx === ingredients.length - 1}
-                      onClick={() => handleMoveIngredient(idx, "down")}
-                      className="p-1 text-stone-400 hover:text-stone-700 disabled:opacity-30 disabled:pointer-events-none rounded hover:bg-stone-200"
-                      title="Move down"
-                    >
-                      <ArrowDown size={12} />
-                    </button>
-                  </div>
+              {ingredients.length === 0 ? (
+                <div className="p-4 bg-stone-50 border border-dashed border-stone-300 rounded-[6px] text-center">
+                  <p className="text-[12px] text-stone-500 italic">
+                    No ingredients added yet. Click &quot;Add Ingredient&quot; below to add items.
+                  </p>
+                </div>
+              ) : (
+                ingredients.map((ing, idx) => (
+                  <div
+                    key={ing.id}
+                    className="flex items-center gap-2 p-2.5 bg-stone-50 border border-stone-200 rounded-[6px]"
+                  >
+                    <span className="text-[11px] font-mono text-stone-400 w-5 text-center">
+                      {idx + 1}
+                    </span>
 
-                  {/* Ingredient Name */}
-                  <div className="flex-1">
                     <input
                       type="text"
+                      placeholder="Ingredient name (e.g. Oats)"
                       value={ing.name}
                       onChange={(e) => handleUpdateIngredient(ing.id, "name", e.target.value)}
-                      placeholder="Ingredient Name (e.g. Oats, Milk...)"
-                      className="w-full px-3 py-1.5 text-[13px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
+                      className="flex-1 px-3 py-1.5 text-[13px] bg-white border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
                     />
-                  </div>
 
-                  {/* Quantity */}
-                  <div className="w-24 sm:w-28">
                     <input
                       type="text"
+                      placeholder="Qty (e.g. 60)"
                       value={ing.quantity}
                       onChange={(e) => handleUpdateIngredient(ing.id, "quantity", e.target.value)}
-                      placeholder="Quantity (60)"
-                      className="w-full px-3 py-1.5 text-[13px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
+                      className="w-20 px-3 py-1.5 text-[13px] bg-white border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
                     />
-                  </div>
 
-                  {/* Unit */}
-                  <div className="w-20 sm:w-24">
                     <input
                       type="text"
+                      placeholder="Unit (g)"
                       value={ing.unit}
                       onChange={(e) => handleUpdateIngredient(ing.id, "unit", e.target.value)}
-                      placeholder="Unit (g/ml)"
-                      className="w-full px-3 py-1.5 text-[13px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
+                      className="w-16 px-2.5 py-1.5 text-[13px] bg-white border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
                     />
-                  </div>
 
-                  {/* Remove Button */}
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveIngredient(ing.id)}
-                    className="p-2 text-stone-400 hover:text-red-600 rounded-[6px] hover:bg-red-50 transition-colors shrink-0"
-                    title="Remove ingredient"
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-              ))}
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => handleMoveIngredient(idx, "up")}
+                        className="p-1 text-stone-400 hover:text-stone-700 disabled:opacity-30 disabled:hover:text-stone-400"
+                        aria-label="Move up"
+                      >
+                        <ArrowUp size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === ingredients.length - 1}
+                        onClick={() => handleMoveIngredient(idx, "down")}
+                        className="p-1 text-stone-400 hover:text-stone-700 disabled:opacity-30 disabled:hover:text-stone-400"
+                        aria-label="Move down"
+                      >
+                        <ArrowDown size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveIngredient(ing.id)}
+                        className="p-1 text-stone-400 hover:text-red-600 transition-colors ml-1"
+                        aria-label="Remove ingredient"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
 
             <button
               type="button"
               onClick={handleAddIngredient}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-[12px] font-heading font-semibold text-[#1E3A2E] bg-stone-100 hover:bg-stone-200 border border-stone-300 rounded-[6px] transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-heading font-semibold text-[#1E3A2E] bg-stone-100 hover:bg-stone-200 rounded-[4px] transition-colors"
             >
               <Plus size={14} />
               <span>Add Ingredient</span>
@@ -977,101 +1084,69 @@ export default function ProductFormModal({
           </div>
 
           {/* ====================================================
-              SECTION F: PRODUCT SETTINGS
+              SECTION F: SETTINGS & VISIBILITY
           ==================================================== */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between pb-1.5 border-b border-stone-200">
-              <h3 className="text-[13px] font-heading font-bold uppercase tracking-[0.08em] text-[#1E3A2E]">
-                Section F — Product Settings
-              </h3>
-              <span className="text-[11px] text-stone-500 font-medium">Availability & Showcase</span>
-            </div>
+          <div className="space-y-4 p-4 bg-stone-50 border border-stone-200 rounded-[8px]">
+            <h3 className="text-[12px] font-heading font-bold uppercase tracking-[0.06em] text-[#1E3A2E]">
+              Section F — Settings & Display Controls
+            </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <label className="flex items-center gap-3 p-3.5 border border-stone-200 rounded-[8px] bg-stone-50/50 hover:bg-stone-50 cursor-pointer sm:col-span-1">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
+              <label className="flex items-center gap-2.5 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={available}
                   onChange={(e) => setAvailable(e.target.checked)}
-                  className="w-4 h-4 text-[#1E3A2E] rounded border-stone-300 focus:ring-[#1E3A2E]"
+                  className="w-4 h-4 rounded text-[#1E3A2E] focus:ring-[#1E3A2E]"
                 />
-                <div>
-                  <span className="block text-[13px] font-heading font-bold text-[#1E3A2E]">
-                    Available on Menu
-                  </span>
-                  <span className="text-[11px] text-stone-500">
-                    Uncheck to mark as &quot;Sold Out&quot;.
-                  </span>
-                </div>
+                <span className="text-[13px] font-medium text-stone-700">
+                  Available on Menu
+                </span>
               </label>
 
-              <label className="flex items-center gap-3 p-3.5 border border-stone-200 rounded-[8px] bg-stone-50/50 hover:bg-stone-50 cursor-pointer sm:col-span-1">
+              <label className="flex items-center gap-2.5 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={isFeatured}
                   onChange={(e) => setIsFeatured(e.target.checked)}
-                  className="w-4 h-4 text-[#1E3A2E] rounded border-stone-300 focus:ring-[#1E3A2E]"
+                  className="w-4 h-4 rounded text-[#1E3A2E] focus:ring-[#1E3A2E]"
                 />
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <Star size={13} className="text-amber-500 fill-amber-500" />
-                    <span className="text-[13px] font-heading font-bold text-[#1E3A2E]">
-                      Featured Platters
-                    </span>
-                  </div>
-                  <span className="text-[11px] text-stone-500">
-                    Display in homepage showcase.
-                  </span>
-                </div>
+                <span className="text-[13px] font-medium text-stone-700">
+                  Featured Platter (Homepage)
+                </span>
               </label>
 
-              <div className="p-3.5 border border-stone-200 rounded-[8px] bg-stone-50/50 sm:col-span-1">
-                <label className="block text-[11px] font-heading font-semibold uppercase text-stone-600 mb-1">
-                  Display Order Rank
+              <div>
+                <label className="block text-[11px] font-heading font-semibold uppercase text-stone-500 mb-1">
+                  Menu Display Sort Order
                 </label>
                 <input
                   type="number"
-                  step="1"
                   value={sortOrder}
                   onChange={(e) => setSortOrder(e.target.value)}
-                  placeholder="e.g. 1"
-                  className="w-full px-3 py-1.5 text-[13px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
+                  placeholder="e.g. 1, 2, 3"
+                  className="w-full px-3 py-1.5 text-[13px] bg-white border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
                 />
               </div>
             </div>
           </div>
 
-          {/* ====================================================
-              MODAL FOOTER ACTIONS
-          ==================================================== */}
-          <div className="pt-4 border-t border-stone-200 flex items-center justify-end gap-3 shrink-0">
+          {/* MODAL FOOTER */}
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-stone-200">
             <button
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="px-4 py-2.5 text-[13px] font-heading font-semibold text-stone-600 hover:text-stone-900 border border-stone-200 hover:bg-stone-50 rounded-[6px] transition-colors"
+              className="px-5 py-2.5 text-[13px] font-heading font-semibold text-stone-600 hover:text-stone-900 transition-colors"
             >
               Cancel
             </button>
-
             <button
               type="submit"
               disabled={loading}
-              className="
-                inline-flex items-center gap-2
-                px-6 py-2.5 text-[13px] font-heading font-semibold uppercase tracking-[0.04em]
-                bg-[#1E3A2E] text-white hover:bg-[#162d22] rounded-[6px]
-                transition-colors disabled:opacity-50 shadow-sm
-              "
+              className="px-6 py-2.5 bg-[#1E3A2E] text-white rounded-[6px] text-[13px] font-heading font-semibold uppercase tracking-[0.05em] hover:bg-[#162d22] transition-colors shadow-sm disabled:opacity-50"
             >
-              {loading && <span className="animate-spin">⏳</span>}
-              <span>
-                {loading
-                  ? "Saving Changes & Uploading..."
-                  : isEditing
-                  ? "Save Changes"
-                  : "Create Platter"}
-              </span>
+              {loading ? "Saving to Database..." : isEditing ? "Save Product Changes" : "Create New Product"}
             </button>
           </div>
         </form>

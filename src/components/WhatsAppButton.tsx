@@ -31,11 +31,32 @@ export default function WhatsAppButton({
       ? "bg-[#1E3A2E] text-white hover:bg-[#162d22] border border-transparent shadow-none"
       : "bg-white text-[#1E3A2E] border border-[#1E3A2E] hover:bg-[#1E3A2E]/5";
 
+  const handleOrderClick = () => {
+    try {
+      fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productName,
+          unitPrice: price,
+          quantity: 1,
+          source: "whatsapp",
+        }),
+        keepalive: true,
+      }).catch(() => {
+        // Non-blocking telemetry
+      });
+    } catch {
+      // Ignore background logging errors
+    }
+  };
+
   return (
     <a
       href={url}
       target="_blank"
       rel="noopener noreferrer"
+      onClick={handleOrderClick}
       className={`
         group inline-flex items-center justify-center gap-2
         rounded-[8px] font-heading font-semibold tracking-[0.06em] uppercase

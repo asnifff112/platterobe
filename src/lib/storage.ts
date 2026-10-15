@@ -1,10 +1,11 @@
 import path from "path";
 import fs from "fs";
-import { getDatabase } from "@/lib/db";
+import { getDatabase, getAllProducts } from "@/lib/db";
+import { getSupabaseAdminClient, isSupabaseConfigured } from "@/lib/supabase";
 
 export interface UploadResult {
   url: string;
-  provider: "vercel-blob" | "local-filesystem" | "database-data-uri";
+  provider: "supabase-storage" | "vercel-blob" | "local-filesystem" | "database-data-uri";
   size: number;
 }
 
@@ -17,16 +18,19 @@ const ALLOWED_MIME_TYPES = [
   "image/gif",
 ];
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 Megabytes
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 Megabytes (matching Supabase bucket limit)
+const SUPABASE_BUCKET_NAME = process.env.SUPABASE_STORAGE_BUCKET || "product-images";
 
 /**
- * Validates and saves an uploaded image file using the optimal persistent storage provider.
+ * Validates and saves an uploaded image file using persistent cloud storage.
  * 
  * Order of Storage Providers:
- * 1. Vercel Blob: Used in production if process.env.BLOB_READ_WRITE_TOKEN is configured.
- * 2. Local Filesystem: Used in local development / self-hosted environments where public/uploads is writable.
- * 3. Database Data URI: Resilient fallback in serverless environments when no external blob token is set,
- *    ensuring images are permanently stored inside SQLite and never lost upon container teardown.
+ * 1. Supabase Storage (Preferred for PostgreSQL + Storage stack):
+ *    Uploads to the persistent 'product-images' bucket and returns an immutable CDN URL.
+ * 2. Vercel Blob Storage:
+ *    Used if BLOB_READ_WRITE_TOKEN is configured.
+ * 3. Local Filesystem (public/uploads):
+ *    Used in local development when public/uploads is writable.
  */
 export async function saveUploadedImage(
   file: File,
@@ -38,7 +42,7 @@ export async function saveUploadedImage(
 
   // 1. Validate File Size
   if (file.size > MAX_FILE_SIZE) {
-    throw new Error("Image file exceeds the maximum allowed limit of 10MB. Please select a smaller file.");
+    throw new Error("Image file exceeds the maximum allowed limit of 5MB. Please select a smaller file.");
   }
 
   // 2. Validate File Type
@@ -59,7 +63,45 @@ export async function saveUploadedImage(
   const filename = `${cleanSlug}-${timestamp}${fileExt}`;
 
   // ----------------------------------------------------
-  // TIER 1: Vercel Blob Storage
+  // TIER 1: Supabase Cloud Storage (Production Ready)
+  // ----------------------------------------------------
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      if (supabase) {
+        const bytes = await file.arrayBuffer();
+        const buffer = Buffer.from(bytes);
+
+        const { error: uploadError } = await supabase.storage
+          .from(SUPABASE_BUCKET_NAME)
+          .upload(filename, buffer, {
+            contentType: mimeType || "image/jpeg",
+            upsert: true,
+          });
+
+        if (uploadError) {
+          console.warn("Supabase Storage upload warning:", uploadError.message);
+        } else {
+          const { data: publicUrlData } = supabase.storage
+            .from(SUPABASE_BUCKET_NAME)
+            .getPublicUrl(filename);
+
+          if (publicUrlData?.publicUrl) {
+            return {
+              url: publicUrlData.publicUrl,
+              provider: "supabase-storage",
+              size: file.size,
+            };
+          }
+        }
+      }
+    } catch (supabaseErr) {
+      console.warn("Supabase Storage exception; checking alternative providers:", supabaseErr);
+    }
+  }
+
+  // ----------------------------------------------------
+  // TIER 2: Vercel Blob Storage
   // ----------------------------------------------------
   if (process.env.BLOB_READ_WRITE_TOKEN) {
     try {
@@ -79,7 +121,7 @@ export async function saveUploadedImage(
   }
 
   // ----------------------------------------------------
-  // TIER 2: Local Filesystem (public/uploads) - only on non-serverless persistent environments
+  // TIER 3: Local Filesystem (public/uploads) - Local Development Only
   // ----------------------------------------------------
   const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
   if (!isServerless) {
@@ -99,29 +141,13 @@ export async function saveUploadedImage(
         size: file.size,
       };
     } catch (fsError) {
-      console.warn("Local filesystem write failed; falling back to resilient database storage:", fsError);
+      console.warn("Local filesystem write failed:", fsError);
     }
   }
 
-  // ----------------------------------------------------
-  // TIER 3: Database-Persisted Base64 Data URI
-  // ----------------------------------------------------
-  try {
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    const detectedMime = mimeType || "image/jpeg";
-    const base64Data = buffer.toString("base64");
-    const dataUrl = `data:${detectedMime};base64,${base64Data}`;
-
-    return {
-      url: dataUrl,
-      provider: "database-data-uri",
-      size: file.size,
-    };
-  } catch (dataUrlErr) {
-    console.error("Failed to process image buffer:", dataUrlErr);
-    throw new Error("Failed to process and store image data. Please try another image.");
-  }
+  throw new Error(
+    "Cloud storage is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or BLOB_READ_WRITE_TOKEN) in your environment variables for persistent cloud storage."
+  );
 }
 
 /**
@@ -142,32 +168,41 @@ export async function cleanupOldImageSafely(
     return;
   }
 
-  // Data URIs exist only in SQLite rows and do not have filesystem artifacts
-  if (oldImageUrl.startsWith("data:")) {
-    return;
-  }
-
-  // Check if any OTHER product in SQLite is using this same image reference
+  // Check if any OTHER product is using this same image reference
   try {
-    const db = getDatabase();
-    const query = currentProductId
-      ? db.prepare("SELECT COUNT(*) as count FROM products WHERE image = ? AND id != ?")
-      : db.prepare("SELECT COUNT(*) as count FROM products WHERE image = ?");
+    const allProducts = await getAllProducts();
+    const otherReferences = allProducts.filter(
+      (p) => p.image === oldImageUrl && p.id !== currentProductId
+    );
 
-    const row = (currentProductId ? query.get(oldImageUrl, currentProductId) : query.get(oldImageUrl)) as {
-      count: number;
-    } | undefined;
-
-    if (row && row.count > 0) {
+    if (otherReferences.length > 0) {
       // Shared image referenced by another product: preserve it!
       return;
     }
   } catch (dbErr) {
-    console.warn("Could not query database during image cleanup check:", dbErr);
+    console.warn("Could not query products during image cleanup check:", dbErr);
     return; // Safely abort cleanup to avoid accidental deletion
   }
 
-  // Safe removal from Vercel Blob
+  // 1. Safe removal from Supabase Storage
+  if (oldImageUrl.includes("/storage/v1/object/public/") && isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      if (supabase) {
+        // Extract filename from URL
+        const parts = oldImageUrl.split(`${SUPABASE_BUCKET_NAME}/`);
+        if (parts.length > 1) {
+          const filePath = parts[1];
+          await supabase.storage.from(SUPABASE_BUCKET_NAME).remove([filePath]);
+        }
+      }
+    } catch (err) {
+      console.warn("Could not delete old image from Supabase Storage:", err);
+    }
+    return;
+  }
+
+  // 2. Safe removal from Vercel Blob
   if (oldImageUrl.includes("blob.vercel-storage.com") && process.env.BLOB_READ_WRITE_TOKEN) {
     try {
       const { del } = await import("@vercel/blob");
@@ -178,7 +213,7 @@ export async function cleanupOldImageSafely(
     return;
   }
 
-  // Safe removal from local uploads folder
+  // 3. Safe removal from local uploads folder
   if (oldImageUrl.startsWith("/uploads/")) {
     try {
       const filename = path.basename(oldImageUrl);

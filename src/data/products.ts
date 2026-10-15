@@ -572,26 +572,10 @@ export function getAvailableProducts(): Product[] {
  */
 export function getProductImageUrl(
   image: string | null | undefined,
-  updatedAt?: string
+  _updatedAt?: string
 ): string {
-  const baseImage = image || "/images/classic-overnight-oats.jpg";
-  if (baseImage.startsWith("data:")) return baseImage;
-  if (!updatedAt) return baseImage;
-
-  // Normalize SQLite 'YYYY-MM-DD HH:mm:ss' to ISO string 'YYYY-MM-DDTHH:mm:ssZ'
-  const normalizedDateStr =
-    updatedAt.includes(" ") && !updatedAt.includes("T")
-      ? updatedAt.replace(" ", "T") + "Z"
-      : updatedAt;
-
-  const timestamp = new Date(normalizedDateStr).getTime();
-  if (isNaN(timestamp)) {
-    const fallbackHash = updatedAt.replace(/[^a-zA-Z0-9]/g, "");
-    if (!fallbackHash) return baseImage;
-    const sep = baseImage.includes("?") ? "&" : "?";
-    return `${baseImage}${sep}v=${fallbackHash}`;
+  if (!image || !image.trim()) {
+    return "https://rsojkuiouwnotplrebki.supabase.co/storage/v1/object/public/product-images/classic-overnight-oats.jpg";
   }
-
-  const separator = baseImage.includes("?") ? "&" : "?";
-  return `${baseImage}${separator}v=${timestamp}`;
+  return image;
 }

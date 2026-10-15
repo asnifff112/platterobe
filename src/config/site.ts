@@ -15,8 +15,8 @@ export const siteConfig = {
     display: "9497716349",
   },
   instagram: {
-    url: "https://www.instagram.com/platterobe.co?utm_source=ig_web_button_share_sheet&obrf=ZDNlZDc0MzIxNw==",
-    handle: "@platterobe.co",
+    url: "https://www.instagram.com/platterobe.store/",
+    handle: "@platterobe.store",
   },
   location: {
     city: "Parappanangadi",

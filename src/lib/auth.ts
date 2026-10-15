@@ -10,6 +10,7 @@ const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60; // 7 days
 function getAuthSecret(): string {
   return (
     process.env.AUTH_SECRET ||
+    process.env.ADMIN_SESSION_SECRET ||
     "platterobe_editorial_secure_session_secret_2026_malappuram_789xyz"
   );
 }
@@ -38,17 +39,17 @@ function safeEqual(a: string, b: string): boolean {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
-export function verifyAdminCredentials(identifier: string, password: string): {
+export async function verifyAdminCredentials(identifier: string, password: string): Promise<{
   isValid: boolean;
   user?: { id: string; email: string; role: string };
-} {
+}> {
   if (!identifier || !password) return { isValid: false };
 
   const cleanIdent = identifier.trim().toLowerCase();
 
-  // 1. Look up user in SQLite database
+  // 1. Look up user in database (Supabase or SQLite)
   try {
-    const dbUser = getUserByEmail(cleanIdent);
+    const dbUser = await getUserByEmail(cleanIdent);
     if (dbUser && dbUser.password_hash) {
       const match = bcrypt.compareSync(password, dbUser.password_hash);
       if (match && dbUser.role === "admin") {
@@ -64,12 +65,44 @@ export function verifyAdminCredentials(identifier: string, password: string): {
 
   // 2. Fallback check against configured environment credentials
   const expectedEmail = getAdminEmail();
-  const expectedPass = getAdminPassword();
-  if (safeEqual(cleanIdent, expectedEmail) && safeEqual(password, expectedPass)) {
-    return {
-      isValid: true,
-      user: { id: "admin-primary", email: expectedEmail, role: "admin" },
-    };
+  if (safeEqual(cleanIdent, expectedEmail)) {
+    // If ADMIN_PASSWORD_HASH is set in env (bcrypt hash format)
+    const envHash = process.env.ADMIN_PASSWORD_HASH;
+    if (envHash) {
+      try {
+        if (bcrypt.compareSync(password, envHash)) {
+          return {
+            isValid: true,
+            user: { id: "admin-primary", email: expectedEmail, role: "admin" },
+          };
+        }
+      } catch {
+        // Continue if not a valid bcrypt hash
+      }
+    }
+
+    const expectedPass = getAdminPassword();
+    // If ADMIN_PASSWORD is formatted as a bcrypt hash ($2a$, $2b$, $2y$)
+    if (expectedPass.startsWith("$2a$") || expectedPass.startsWith("$2b$") || expectedPass.startsWith("$2y$")) {
+      try {
+        if (bcrypt.compareSync(password, expectedPass)) {
+          return {
+            isValid: true,
+            user: { id: "admin-primary", email: expectedEmail, role: "admin" },
+          };
+        }
+      } catch {
+        // Continue to plaintext comparison if bcrypt failed
+      }
+    }
+
+    // Plaintext password comparison
+    if (safeEqual(password, expectedPass)) {
+      return {
+        isValid: true,
+        user: { id: "admin-primary", email: expectedEmail, role: "admin" },
+      };
+    }
   }
 
   return { isValid: false };

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
@@ -311,6 +311,7 @@ export default function AdminDashboardClient({
                             unoptimized={Boolean(item.image?.startsWith("data:"))}
                             alt={item.name}
                             fill
+                            sizes="48px"
                             className="object-cover"
                           />
                         </div>
@@ -464,6 +465,7 @@ export default function AdminDashboardClient({
 
       {/* Edit/Create Modal */}
       <ProductFormModal
+        key={editingProduct ? `edit-${editingProduct.id}` : "create-new-product"}
         isOpen={formModalOpen}
         product={editingProduct}
         onClose={() => setFormModalOpen(false)}

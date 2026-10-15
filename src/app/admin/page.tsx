@@ -1,4 +1,4 @@
-﻿import { redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/auth";
 import { getAllProducts } from "@/lib/db";
 import AdminHeader from "@/components/admin/AdminHeader";
@@ -23,7 +23,7 @@ export default async function AdminDashboardPage() {
     redirect("/admin/login");
   }
 
-  const products = getAllProducts();
+  const products = await getAllProducts();
 
   return (
     <div className="min-h-screen bg-[#F8F5E9]/40 text-[#1A1A1A]">

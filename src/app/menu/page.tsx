@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 
 export default async function MenuPage() {
   await connection();
-  const products = getAvailableProducts();
+  const products = await getAvailableProducts();
 
   return (
     <>

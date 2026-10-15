@@ -7,9 +7,11 @@
         "build": "next build",
         "start": "next start",
         "lint": "eslint",
-        "admin:provision": "node scripts/seed-admin.js"
+        "admin:provision": "node scripts/seed-admin.js",
+        "db:migrate": "node scripts/migrate-to-supabase.js"
     },
     "dependencies": {
+        "@supabase/supabase-js": "^2.117.3",
         "@vercel/blob": "^2.8.1",
         "bcryptjs": "^3.0.3",
         "better-sqlite3": "^13.0.3",

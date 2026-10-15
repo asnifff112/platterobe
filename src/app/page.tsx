@@ -15,8 +15,8 @@ import { getAvailableProducts, getFeaturedProducts } from "@/lib/db";
 
 export default async function HomePage() {
   await connection();
-  const allProducts = getAvailableProducts();
-  const featuredProducts = getFeaturedProducts();
+  const allProducts = await getAvailableProducts();
+  const featuredProducts = await getFeaturedProducts();
 
   return (
     <>
