@@ -152,16 +152,31 @@ export async function toggleProductFeaturedStatus(id: string, currentlyFeatured:
 export async function removeProduct(id: string) {
   const session = await getAdminSession();
   if (!session.isAuthenticated || session.role !== "admin") {
-    throw new Error("Unauthorized: Administrator permissions required.");
+    return { success: false, error: "Unauthorized: Administrator permissions required." };
   }
 
   const product = await getProductById(id);
-  await deleteProduct(id);
+  const deleted = await deleteProduct(id);
+
+  if (!deleted) {
+    return { success: false, error: "Failed to delete product from database." };
+  }
+
+  // Safely clean up product image from cloud storage if not shared or preset
+  if (product?.image) {
+    try {
+      await cleanupOldImageSafely(product.image, "", id);
+    } catch (imgErr) {
+      console.warn("Non-critical: Image cleanup failed on delete:", imgErr);
+    }
+  }
 
   if (product) {
     revalidatePath(`/product/${product.slug}`);
+    revalidatePath(`/product/${product.slug}`, "page");
   }
   revalidatePath("/admin");
+  revalidatePath("/admin", "page");
   revalidatePath("/", "page");
   revalidatePath("/menu", "page");
   revalidatePath("/", "layout");

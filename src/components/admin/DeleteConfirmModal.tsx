@@ -9,7 +9,7 @@ interface DeleteConfirmModalProps {
   product: Product | null;
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (deletedId?: string) => void;
 }
 
 export default function DeleteConfirmModal({
@@ -32,14 +32,15 @@ export default function DeleteConfirmModal({
       const res = await removeProduct(product.id);
       if (res?.success) {
         setLoading(false);
-        onSuccess();
+        onSuccess(product.id);
       } else {
-        setError("Failed to delete product.");
+        setError(res?.error || "Failed to delete product from database.");
         setLoading(false);
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
-      setError("An unexpected error occurred.");
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(msg);
       setLoading(false);
     }
   }

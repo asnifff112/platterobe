@@ -131,6 +131,19 @@ export default function AdminDashboardClient({
     router.refresh();
   }
 
+  function handleDeleteSuccess(deletedId?: string) {
+    setDeleteModalOpen(false);
+    if (deletedId) {
+      setProducts((prev) => prev.filter((p) => p.id !== deletedId));
+    }
+    setDeletingProduct(null);
+    setSuccessToast("Platter permanently deleted from database.");
+    setTimeout(() => {
+      setSuccessToast(null);
+    }, 4000);
+    router.refresh();
+  }
+
   return (
     <div className="space-y-8">
       {/* Success notification toast */}
@@ -481,7 +494,7 @@ export default function AdminDashboardClient({
         isOpen={deleteModalOpen}
         product={deletingProduct}
         onClose={() => setDeleteModalOpen(false)}
-        onSuccess={() => handleModalSuccess("Platter deleted from database.")}
+        onSuccess={handleDeleteSuccess}
       />
     </div>
   );

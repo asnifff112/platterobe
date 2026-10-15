@@ -184,7 +184,13 @@ export async function DELETE(request: Request, context: RouteContext) {
       );
     }
 
-    await deleteProduct(id);
+    const deleted = await deleteProduct(id);
+    if (!deleted) {
+      return NextResponse.json(
+        { success: false, error: "Failed to delete product from database." },
+        { status: 500 }
+      );
+    }
 
     // Clean up image if not shared
     if (existing.image) {
@@ -192,6 +198,7 @@ export async function DELETE(request: Request, context: RouteContext) {
     }
 
     revalidatePath("/admin");
+    revalidatePath("/admin", "page");
     revalidatePath("/", "page");
     revalidatePath("/menu", "page");
     revalidatePath(`/product/${existing.slug}`, "page");

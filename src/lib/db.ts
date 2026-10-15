@@ -310,7 +310,7 @@ function mapRowToProduct(row: ProductRow): Product {
 // ----------------------------------------------------------
 
 export async function getAllProducts(): Promise<Product[]> {
-  // 1. Try Supabase PostgreSQL if configured
+  // 1. Supabase PostgreSQL is the authoritative source when configured
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdminClient();
@@ -321,7 +321,8 @@ export async function getAllProducts(): Promise<Product[]> {
           .order("sort_order", { ascending: true })
           .order("created_at", { ascending: true });
 
-        if (!error && data && data.length > 0) {
+        if (!error && data) {
+          // Supabase is authoritative — return its result even if empty
           return data.map(mapRowToProduct);
         }
         if (error) {
@@ -333,7 +334,7 @@ export async function getAllProducts(): Promise<Product[]> {
     }
   }
 
-  // 2. Fallback to Local SQLite
+  // 2. Fallback to Local SQLite (only when Supabase is unavailable or errored)
   try {
     const db = getDatabase();
     const rows = db.prepare("SELECT * FROM products ORDER BY sort_order ASC, created_at ASC").all() as ProductRow[];
@@ -345,7 +346,7 @@ export async function getAllProducts(): Promise<Product[]> {
 }
 
 export async function getAvailableProducts(): Promise<Product[]> {
-  // 1. Try Supabase PostgreSQL if configured
+  // 1. Supabase PostgreSQL is the authoritative source when configured
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdminClient();
@@ -357,7 +358,8 @@ export async function getAvailableProducts(): Promise<Product[]> {
           .order("sort_order", { ascending: true })
           .order("created_at", { ascending: true });
 
-        if (!error && data && data.length > 0) {
+        if (!error && data) {
+          // Supabase is authoritative — return its result even if empty
           return data.map(mapRowToProduct);
         }
         if (error) {
@@ -369,7 +371,7 @@ export async function getAvailableProducts(): Promise<Product[]> {
     }
   }
 
-  // 2. Fallback to Local SQLite
+  // 2. Fallback to Local SQLite (only when Supabase is unavailable or errored)
   try {
     const db = getDatabase();
     const rows = db.prepare("SELECT * FROM products WHERE available = 1 ORDER BY sort_order ASC, created_at ASC").all() as ProductRow[];
@@ -381,7 +383,7 @@ export async function getAvailableProducts(): Promise<Product[]> {
 }
 
 export async function getFeaturedProducts(): Promise<Product[]> {
-  // 1. Try Supabase PostgreSQL if configured
+  // 1. Supabase PostgreSQL is the authoritative source when configured
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdminClient();
@@ -395,6 +397,7 @@ export async function getFeaturedProducts(): Promise<Product[]> {
           .order("created_at", { ascending: true });
 
         if (!error && data) {
+          // Supabase is authoritative — return its result even if empty
           return data.map(mapRowToProduct);
         }
         if (error) {
@@ -406,7 +409,7 @@ export async function getFeaturedProducts(): Promise<Product[]> {
     }
   }
 
-  // 2. Fallback to Local SQLite
+  // 2. Fallback to Local SQLite (only when Supabase is unavailable or errored)
   try {
     const db = getDatabase();
     const rows = db
@@ -420,7 +423,7 @@ export async function getFeaturedProducts(): Promise<Product[]> {
 }
 
 export async function getProductBySlug(slug: string): Promise<Product | undefined> {
-  // 1. Try Supabase PostgreSQL if configured
+  // 1. Supabase PostgreSQL is the authoritative source when configured
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdminClient();
@@ -431,16 +434,18 @@ export async function getProductBySlug(slug: string): Promise<Product | undefine
           .eq("slug", slug)
           .maybeSingle();
 
-        if (!error && data) {
-          return mapRowToProduct(data);
+        if (!error) {
+          // Supabase is authoritative — if data is null, the product does not exist
+          return data ? mapRowToProduct(data) : undefined;
         }
+        console.warn("Supabase query error in getProductBySlug; using fallback:", error.message);
       }
     } catch (supabaseErr) {
       console.warn("Supabase exception in getProductBySlug:", supabaseErr);
     }
   }
 
-  // 2. Fallback to Local SQLite
+  // 2. Fallback to Local SQLite (only when Supabase is unavailable or errored)
   try {
     const db = getDatabase();
     const row = db.prepare("SELECT * FROM products WHERE slug = ?").get(slug) as ProductRow | undefined;
@@ -453,7 +458,7 @@ export async function getProductBySlug(slug: string): Promise<Product | undefine
 }
 
 export async function getProductById(id: string): Promise<Product | undefined> {
-  // 1. Try Supabase PostgreSQL if configured
+  // 1. Supabase PostgreSQL is the authoritative source when configured
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdminClient();
@@ -464,16 +469,18 @@ export async function getProductById(id: string): Promise<Product | undefined> {
           .eq("id", id)
           .maybeSingle();
 
-        if (!error && data) {
-          return mapRowToProduct(data);
+        if (!error) {
+          // Supabase is authoritative — if data is null, the product does not exist
+          return data ? mapRowToProduct(data) : undefined;
         }
+        console.warn("Supabase query error in getProductById; using fallback:", error.message);
       }
     } catch (supabaseErr) {
       console.warn("Supabase exception in getProductById:", supabaseErr);
     }
   }
 
-  // 2. Fallback to Local SQLite
+  // 2. Fallback to Local SQLite (only when Supabase is unavailable or errored)
   try {
     const db = getDatabase();
     const row = db.prepare("SELECT * FROM products WHERE id = ?").get(id) as ProductRow | undefined;
@@ -787,31 +794,71 @@ export async function toggleProductFeatured(id: string, isFeatured: boolean): Pr
 }
 
 export async function deleteProduct(id: string): Promise<boolean> {
-  // 1. Supabase
+  // 1. Supabase PostgreSQL is the authoritative source when configured
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdminClient();
       if (supabase) {
+        // Verify the product exists before attempting deletion
+        const { data: existing } = await supabase
+          .from("products")
+          .select("id")
+          .eq("id", id)
+          .maybeSingle();
+
+        if (!existing) {
+          // If not found in Supabase, also check if it exists in SQLite and clean it up
+          try {
+            const db = getDatabase();
+            const res = db.prepare("DELETE FROM products WHERE id = ?").run(id);
+            if (res.changes > 0) {
+              return true;
+            }
+          } catch {
+            // ignore
+          }
+          console.warn(`deleteProduct: Product '${id}' not found in Supabase or SQLite.`);
+          return false;
+        }
+
         const { error } = await supabase
           .from("products")
           .delete()
           .eq("id", id);
 
-        if (!error) {
-          try {
-            getDatabase().prepare("DELETE FROM products WHERE id = ?").run(id);
-          } catch {
-            // ignore
-          }
-          return true;
+        if (error) {
+          console.error("Supabase delete product error:", error.message);
+          return false;
         }
+
+        // Confirm the product no longer exists in Supabase
+        const { data: verify } = await supabase
+          .from("products")
+          .select("id")
+          .eq("id", id)
+          .maybeSingle();
+
+        if (verify) {
+          console.error(`deleteProduct: Product '${id}' still exists in Supabase after DELETE.`);
+          return false;
+        }
+
+        // Also remove from SQLite to keep it in sync
+        try {
+          getDatabase().prepare("DELETE FROM products WHERE id = ?").run(id);
+        } catch (sqliteErr) {
+          console.warn("SQLite mirror deletion failed (non-critical):", sqliteErr);
+        }
+
+        return true;
       }
     } catch (err) {
-      console.warn("Supabase delete product error:", err);
+      console.error("Supabase delete product exception:", err);
+      return false;
     }
   }
 
-  // 2. SQLite
+  // 2. SQLite fallback (only when Supabase is unavailable)
   try {
     const db = getDatabase();
     const res = db.prepare("DELETE FROM products WHERE id = ?").run(id);

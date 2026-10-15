@@ -1,11 +1,12 @@
+export const instant = false;
+
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { getAdminSession } from "@/lib/auth";
 import { getAllProducts } from "@/lib/db";
 import AdminHeader from "@/components/admin/AdminHeader";
 import AdminDashboardClient from "@/components/admin/AdminDashboardClient";
 import type { Metadata } from "next";
-
-export const instant = false;
 
 export const metadata: Metadata = {
   title: "Admin Dashboard - Platter Management",
@@ -16,6 +17,7 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminDashboardPage() {
+  await connection();
   const session = await getAdminSession();
 
   // Server-side route protection: redirect unauthenticated users to /admin/login immediately
