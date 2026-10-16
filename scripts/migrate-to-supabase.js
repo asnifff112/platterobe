@@ -122,6 +122,7 @@ async function runMigration() {
           available: Boolean(r.available),
           category: r.category || "breakfast",
           weight: r.weight || "",
+          series_no: r.series_no || null,
           sort_order: r.sort_order || 0,
         };
       });

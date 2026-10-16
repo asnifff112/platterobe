@@ -57,7 +57,8 @@ export default function AdminDashboardClient({
     const matchesSearch =
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.slug.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.subtitle.toLowerCase().includes(searchTerm.toLowerCase());
+      p.subtitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.seriesNo && p.seriesNo.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesCategory =
       selectedCategory === "all" ||
       normalizeCategoryKey(p.category) === selectedCategory;
@@ -332,9 +333,16 @@ export default function AdminDashboardClient({
                           <p className="font-heading font-bold text-[14px] text-[#1E3A2E] leading-tight">
                             {item.name}
                           </p>
-                          <p className="text-[11px] text-[#1A1A1A]/50 truncate max-w-[200px] mt-0.5">
-                            /{item.slug}
-                          </p>
+                          <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                            {item.seriesNo && (
+                              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#1E3A2E]/10 text-[#1E3A2E] tracking-wider">
+                                {item.seriesNo}
+                              </span>
+                            )}
+                            <span className="text-[11px] text-[#1A1A1A]/50 truncate max-w-[140px]">
+                              /{item.slug}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </td>

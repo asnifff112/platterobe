@@ -17,6 +17,7 @@ export type Nutrition = {
 export type Product = {
   id: string;
   slug: string;
+  seriesNo?: string | null; // e.g. "PLTR.001"
   name: string;
   subtitle: string;
   shortDescription: string;
@@ -39,6 +40,7 @@ export const products: Product[] = [
   // 1. Oat Jars
   {
     id: "1",
+    seriesNo: "PLTR.001",
     slug: "oat-jar",
     name: "Oat Jar",
     subtitle: "Oats · Milk · Banana · Chia · Honey",
@@ -70,6 +72,7 @@ export const products: Product[] = [
   },
   {
     id: "2",
+    seriesNo: "PLTR.002",
     slug: "fruit-oat-jar",
     name: "Fruit Oat Jar",
     subtitle: "Oats · Milk · Mixed Fruits · Chia · Honey",
@@ -103,6 +106,7 @@ export const products: Product[] = [
   },
   {
     id: "3",
+    seriesNo: "PLTR.003",
     slug: "nutty-oat-jar",
     name: "Nutty Oat Jar",
     subtitle: "Oats · Milk · Banana · PB · Chia · Dates · Nuts",
@@ -138,6 +142,7 @@ export const products: Product[] = [
   // 2. Parfaits
   {
     id: "4",
+    seriesNo: "PLTR.004",
     slug: "banana-parfait",
     name: "Banana Parfait",
     subtitle: "Yogurt · Banana · Peanut Butter · Oats · Chia · Nuts",
@@ -171,6 +176,7 @@ export const products: Product[] = [
   },
   {
     id: "5",
+    seriesNo: "PLTR.005",
     slug: "fruit-parfait",
     name: "Fruit Parfait",
     subtitle: "Yogurt · Seasonal Grapes · Banana · Oats · Chia · Honey",
@@ -204,6 +210,7 @@ export const products: Product[] = [
   },
   {
     id: "6",
+    seriesNo: "PLTR.006",
     slug: "apple-parfait",
     name: "Apple Parfait",
     subtitle: "Yogurt · Fresh Apple · Oats · Cinnamon · Almonds · Honey",
@@ -239,6 +246,7 @@ export const products: Product[] = [
   // 3. Chia Clouds
   {
     id: "7",
+    seriesNo: "PLTR.007",
     slug: "chia-cloud",
     name: "Chia Cloud",
     subtitle: "Chia Seeds · Milk · Banana · Honey · Raisins · Sunflower Seeds",
@@ -271,6 +279,7 @@ export const products: Product[] = [
   },
   {
     id: "8",
+    seriesNo: "PLTR.008",
     slug: "nutty-chia-cloud",
     name: "Nutty Chia Cloud",
     subtitle: "Chia · Milk · Banana · PB · Dates · Mixed Nuts",
@@ -303,6 +312,7 @@ export const products: Product[] = [
   },
   {
     id: "9",
+    seriesNo: "PLTR.009",
     slug: "fruit-chia-cloud",
     name: "Fruit Chia Cloud",
     subtitle: "Chia · Milk · Diced Apple · Banana · Cinnamon · Nuts",
@@ -338,6 +348,7 @@ export const products: Product[] = [
   // 4. Toast + Pancakes
   {
     id: "10",
+    seriesNo: "PLTR.010",
     slug: "protein-toast",
     name: "Protein Toast",
     subtitle: "2 Boiled Eggs · 2 Bread Slices · Peanut Butter",
@@ -367,6 +378,7 @@ export const products: Product[] = [
   },
   {
     id: "11",
+    seriesNo: "PLTR.011",
     slug: "banana-toast",
     name: "Banana Toast",
     subtitle: "Boiled Banana · 2 Bread Slices · Peanut Butter",
@@ -396,6 +408,7 @@ export const products: Product[] = [
   },
   {
     id: "12",
+    seriesNo: "PLTR.012",
     slug: "peanut-stack",
     name: "Peanut Stack",
     subtitle: "3 Bread Slices · Peanut Butter · Fresh Banana",
@@ -425,6 +438,7 @@ export const products: Product[] = [
   },
   {
     id: "13",
+    seriesNo: "PLTR.013",
     slug: "power-duo",
     name: "Power Duo",
     subtitle: "2 Boiled Bananas · 2 Boiled Eggs",
@@ -453,6 +467,7 @@ export const products: Product[] = [
   },
   {
     id: "14",
+    seriesNo: "PLTR.014",
     slug: "oat-cakes",
     name: "Oat Cakes",
     subtitle: "3 Oat Pancakes · Boiled Egg · Honey · Banana",
@@ -488,6 +503,7 @@ export const products: Product[] = [
   // 5. Drinks
   {
     id: "15",
+    seriesNo: "PLTR.015",
     slug: "banana-blend",
     name: "Banana Blend",
     subtitle: "Banana · Rolled Oats · Milk · Raw Honey · Dates",
@@ -519,6 +535,7 @@ export const products: Product[] = [
   },
   {
     id: "16",
+    seriesNo: "PLTR.016",
     slug: "abc-glow",
     name: "ABC Glow",
     subtitle: "Apple · Beetroot · Carrot · Lemon · Ginger",
@@ -550,6 +567,11 @@ export const products: Product[] = [
     category: "fresh-juice",
   },
 ];
+
+export function getProductBySeriesNo(seriesNo: string): Product | undefined {
+  const clean = seriesNo.trim().toUpperCase();
+  return products.find((p) => p.seriesNo && p.seriesNo.toUpperCase() === clean);
+}
 
 export function getProductBySlug(slug: string): Product | undefined {
   return products.find((p) => p.slug === slug);

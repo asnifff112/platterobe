@@ -19,6 +19,7 @@ import {
   toggleProductFeatured,
   getProductById,
   getProductBySlug,
+  getProductBySeriesNo,
   getUserById,
   getUserByEmail,
   updateUserPassword,
@@ -26,6 +27,7 @@ import {
 import type { Product } from "@/data/products";
 import { saveUploadedImage, cleanupOldImageSafely } from "@/lib/storage";
 import { isValidCategoryKey, normalizeCategoryKey, CategoryKey } from "@/data/categories";
+import { normalizeSeriesNo, isValidSeriesNo } from "@/lib/series";
 
 // ----------------------------------------------------------
 // Authentication Actions
@@ -228,6 +230,29 @@ export async function upsertProductAction(formData: FormData) {
       }
     }
 
+    // Series No. handling and uniqueness check
+    const seriesNoRaw = formData.get("seriesNo") as string | null;
+    const seriesNo = seriesNoRaw && seriesNoRaw.trim().length > 0 ? normalizeSeriesNo(seriesNoRaw) : null;
+
+    if (!id && !seriesNo) {
+      return { error: "Series No. is required for new products (e.g. PLTR.001)." };
+    }
+
+    if (seriesNo) {
+      if (!isValidSeriesNo(seriesNo)) {
+        return {
+          error: `Invalid Series No. format "${seriesNo}". Must be 3 to 32 characters using letters, numbers, dots, or hyphens (e.g. PLTR.001).`,
+        };
+      }
+
+      const existingWithSeries = await getProductBySeriesNo(seriesNo);
+      if (existingWithSeries && existingWithSeries.id !== id) {
+        return {
+          error: `A product with Series No. "${seriesNo}" already exists ("${existingWithSeries.name}"). Series No. must be unique across all platters.`,
+        };
+      }
+    }
+
     const subtitle = (formData.get("subtitle") as string)?.trim() || "";
     const shortDescription = (formData.get("shortDescription") as string)?.trim() || "";
     const description = (formData.get("description") as string)?.trim() || "";
@@ -377,6 +402,7 @@ export async function upsertProductAction(formData: FormData) {
     if (id) {
       await updateProduct(id, {
         slug,
+        seriesNo,
         name,
         subtitle,
         shortDescription,
@@ -398,6 +424,7 @@ export async function upsertProductAction(formData: FormData) {
       await createProduct({
         id: newId,
         slug,
+        seriesNo,
         name,
         subtitle,
         shortDescription,
@@ -420,12 +447,17 @@ export async function upsertProductAction(formData: FormData) {
     revalidatePath("/", "page");
     revalidatePath("/menu", "page");
     revalidatePath(`/product/${slug}`, "page");
+    revalidatePath("/index", "page");
+    revalidatePath("/index");
     revalidatePath("/", "layout");
 
     return { success: true };
   } catch (err: unknown) {
     console.error("Failed to save product:", err);
     const msg = err instanceof Error ? err.message : "Database error";
+    if (msg.includes("idx_products_series_no") || msg.toLowerCase().includes("unique constraint") || msg.includes("series_no")) {
+      return { error: `A product with this Series No. already exists. Please enter a unique Series No.` };
+    }
     return { error: `Failed to save product: ${msg}` };
   }
 }

@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { Product, products as initialProducts, Ingredient } from "@/data/products";
 import { normalizeCategoryKey } from "@/data/categories";
 import { getSupabaseAdminClient, isSupabaseConfigured } from "@/lib/supabase";
+import { normalizeSeriesNo } from "@/lib/series";
 
 const DB_DIR = path.join(process.cwd(), "data");
 const SOURCE_DB_PATH = path.join(DB_DIR, "platterobe.db");
@@ -126,6 +127,14 @@ export function getDatabase(): Database.Database {
       if (!colNames.includes("is_featured")) {
         db.exec("ALTER TABLE products ADD COLUMN is_featured INTEGER NOT NULL DEFAULT 0;");
       }
+      if (!colNames.includes("series_no")) {
+        db.exec("ALTER TABLE products ADD COLUMN series_no TEXT;");
+      }
+      try {
+        db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_products_series_no ON products (UPPER(TRIM(series_no))) WHERE series_no IS NOT NULL AND TRIM(series_no) <> '';");
+      } catch {
+        // ignore if index already exists
+      }
       if (!colNames.includes("updated_at")) {
         db.exec("ALTER TABLE products ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'));");
       }
@@ -233,6 +242,8 @@ export function getDatabase(): Database.Database {
 interface ProductRow {
   id: string;
   slug: string;
+  series_no?: string | null;
+  seriesNo?: string | null;
   name: string;
   subtitle: string;
   shortDescription?: string;
@@ -283,9 +294,13 @@ function mapRowToProduct(row: ProductRow): Product {
     }
   }
 
+  const rawSeries = row.series_no || row.seriesNo;
+  const seriesNo = rawSeries && rawSeries.trim().length > 0 ? normalizeSeriesNo(rawSeries) : null;
+
   return {
     id: String(row.id),
     slug: String(row.slug),
+    seriesNo: seriesNo || null,
     name: String(row.name),
     subtitle: row.subtitle || "",
     shortDescription: row.short_description || row.shortDescription || "",
@@ -492,19 +507,68 @@ export async function getProductById(id: string): Promise<Product | undefined> {
   }
 }
 
+export async function getProductBySeriesNo(seriesNo: string): Promise<Product | undefined> {
+  const normalized = normalizeSeriesNo(seriesNo);
+  if (!normalized) return undefined;
+
+  // 1. Supabase PostgreSQL is the authoritative source when configured
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from("products")
+          .select("*")
+          .ilike("series_no", normalized)
+          .maybeSingle();
+
+        if (!error && data) {
+          return mapRowToProduct(data);
+        }
+        if (error && error.code !== "42703") {
+          console.warn("Supabase query error in getProductBySeriesNo; using fallback:", error.message);
+        }
+      }
+    } catch (supabaseErr) {
+      console.warn("Supabase exception in getProductBySeriesNo:", supabaseErr);
+    }
+  }
+
+  // 2. Fallback to Local SQLite
+  try {
+    const db = getDatabase();
+    const row = db
+      .prepare("SELECT * FROM products WHERE UPPER(TRIM(series_no)) = ?")
+      .get(normalized) as ProductRow | undefined;
+    if (row) {
+      return mapRowToProduct(row);
+    }
+  } catch (err) {
+    console.error("Error fetching product by seriesNo from SQLite database:", err);
+  }
+
+  // 3. Fallback to initial products catalog
+  const staticMatch = initialProducts.find(
+    (p) => p.seriesNo && normalizeSeriesNo(p.seriesNo) === normalized
+  );
+  return staticMatch;
+}
+
 export async function createProduct(product: Omit<Product, "id"> & { id?: string }): Promise<Product> {
   const id = product.id || String(Date.now());
   const validCategory = normalizeCategoryKey(product.category || "breakfast");
   const sortOrder = product.sortOrder ?? 0;
+  const normalizedSeriesNo = product.seriesNo ? normalizeSeriesNo(product.seriesNo) : null;
 
   // 1. Create in Supabase if configured
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdminClient();
       if (supabase) {
-        const dbRow = {
+        const dbRow: Record<string, unknown> = {
           id,
           slug: product.slug,
+          series_no: normalizedSeriesNo,
           name: product.name,
           subtitle: product.subtitle ?? "",
           short_description: product.shortDescription ?? "",
@@ -523,11 +587,20 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
           updated_at: new Date().toISOString(),
         };
 
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from("products")
           .insert(dbRow)
           .select("*")
           .single();
+
+        // Gracefully retry without series_no if column does not exist yet on Supabase
+        if (error && (error.code === "42703" || error.message?.includes("series_no"))) {
+          console.warn("Supabase products table does not have series_no column yet. Inserting without series_no in Supabase.");
+          delete dbRow.series_no;
+          const retry = await supabase.from("products").insert(dbRow).select("*").single();
+          data = retry.data;
+          error = retry.error;
+        }
 
         if (!error && data) {
           // Also sync to local SQLite if writable
@@ -535,11 +608,11 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
             const db = getDatabase();
             db.prepare(`
               INSERT OR REPLACE INTO products (
-                id, slug, name, subtitle, shortDescription, description, whyYoullLikeIt,
+                id, slug, series_no, name, subtitle, shortDescription, description, whyYoullLikeIt,
                 price, original_price, is_featured, image, ingredients, nutrition, available, category, sort_order, weight, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
             `).run(
-              id, product.slug, product.name, product.subtitle ?? "", product.shortDescription ?? "",
+              id, product.slug, normalizedSeriesNo, product.name, product.subtitle ?? "", product.shortDescription ?? "",
               product.description ?? "", product.whyYoullLikeIt ?? "", product.price ?? null,
               product.originalPrice ?? null, product.isFeatured ? 1 : 0, product.image || "",
               JSON.stringify(product.ingredients || []), JSON.stringify(product.nutrition || {}),
@@ -549,7 +622,11 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
             // ignore
           }
 
-          return mapRowToProduct(data);
+          const mapped = mapRowToProduct(data);
+          if (normalizedSeriesNo && !mapped.seriesNo) {
+            mapped.seriesNo = normalizedSeriesNo;
+          }
+          return mapped;
         }
         if (error) {
           console.warn("Supabase insert error; saving to local database:", error.message);
@@ -570,16 +647,17 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
 
   const stmt = db.prepare(`
     INSERT INTO products (
-      id, slug, name, subtitle, shortDescription, description, whyYoullLikeIt,
+      id, slug, series_no, name, subtitle, shortDescription, description, whyYoullLikeIt,
       price, original_price, is_featured, image, ingredients, nutrition, available, category, sort_order, weight, updated_at
     ) VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')
     )
   `);
 
   stmt.run(
     id,
     product.slug,
+    normalizedSeriesNo,
     product.name,
     product.subtitle ?? "",
     product.shortDescription ?? "",
@@ -609,14 +687,18 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
   const validCategory = normalizeCategoryKey(merged.category || "breakfast");
   const sortOrder = merged.sortOrder !== undefined ? merged.sortOrder : (existing.sortOrder ?? 0);
   const finalImage = merged.image || existing.image || "";
+  const normalizedSeriesNo = merged.seriesNo !== undefined
+    ? (merged.seriesNo ? normalizeSeriesNo(merged.seriesNo) : null)
+    : (existing.seriesNo ? normalizeSeriesNo(existing.seriesNo) : null);
 
   // 1. Update in Supabase if configured
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdminClient();
       if (supabase) {
-        const dbRow = {
+        const dbRow: Record<string, unknown> = {
           slug: merged.slug,
+          series_no: normalizedSeriesNo,
           name: merged.name,
           subtitle: merged.subtitle ?? "",
           short_description: merged.shortDescription ?? "",
@@ -635,12 +717,26 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
           updated_at: new Date().toISOString(),
         };
 
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from("products")
           .update(dbRow)
           .eq("id", id)
           .select("*")
           .single();
+
+        // Gracefully retry without series_no if column does not exist yet on Supabase
+        if (error && (error.code === "42703" || error.message?.includes("series_no"))) {
+          console.warn("Supabase products table does not have series_no column yet. Updating without series_no in Supabase.");
+          delete dbRow.series_no;
+          const retry = await supabase
+            .from("products")
+            .update(dbRow)
+            .eq("id", id)
+            .select("*")
+            .single();
+          data = retry.data;
+          error = retry.error;
+        }
 
         if (!error && data) {
           // Sync to SQLite
@@ -648,13 +744,14 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
             const db = getDatabase();
             db.prepare(`
               UPDATE products SET
-                slug = ?, name = ?, subtitle = ?, shortDescription = ?, description = ?, whyYoullLikeIt = ?,
+                slug = ?, series_no = ?, name = ?, subtitle = ?, shortDescription = ?, description = ?, whyYoullLikeIt = ?,
                 price = ?, original_price = ?, is_featured = ?, image = ?, ingredients = ?, nutrition = ?,
                 available = ?, category = ?, weight = ?, sort_order = ?, updated_at = datetime('now')
               WHERE id = ?
             `).run(
-              merged.slug, merged.name, merged.subtitle ?? "", merged.shortDescription ?? "", merged.description ?? "",
-              merged.whyYoullLikeIt ?? "", merged.price ?? null, merged.originalPrice ?? null, merged.isFeatured ? 1 : 0,
+              merged.slug, normalizedSeriesNo, merged.name, merged.subtitle ?? "", merged.shortDescription ?? "",
+              merged.description ?? "", merged.whyYoullLikeIt ?? "", merged.price ?? null,
+              merged.originalPrice ?? null, merged.isFeatured ? 1 : 0,
               finalImage, JSON.stringify(merged.ingredients || []),
               JSON.stringify(merged.nutrition || {}), merged.available ? 1 : 0, validCategory, merged.weight ?? "", sortOrder, id
             );
@@ -662,7 +759,11 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
             // ignore
           }
 
-          return mapRowToProduct(data);
+          const mapped = mapRowToProduct(data);
+          if (normalizedSeriesNo && !mapped.seriesNo) {
+            mapped.seriesNo = normalizedSeriesNo;
+          }
+          return mapped;
         }
         if (error) {
           console.warn("Supabase update error; saving to local database:", error.message);
@@ -678,6 +779,7 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
   const stmt = db.prepare(`
     UPDATE products SET
       slug = ?,
+      series_no = ?,
       name = ?,
       subtitle = ?,
       shortDescription = ?,
@@ -699,6 +801,7 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
 
   stmt.run(
     merged.slug,
+    normalizedSeriesNo,
     merged.name,
     merged.subtitle ?? "",
     merged.shortDescription ?? "",

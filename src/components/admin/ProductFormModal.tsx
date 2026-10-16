@@ -5,6 +5,7 @@ import Image from "next/image";
 import { getProductImageUrl, type Product, type Ingredient } from "@/data/products";
 import { MENU_CATEGORIES, CategoryKey, normalizeCategoryKey } from "@/data/categories";
 import { upsertProductAction } from "@/app/admin/actions";
+import { normalizeSeriesNo } from "@/lib/series";
 import {
   X,
   Upload,
@@ -96,6 +97,7 @@ export default function ProductFormModal({
   // SECTION A: Basic Information
   const [name, setName] = useState(product?.name || "");
   const [slug, setSlug] = useState(product?.slug || "");
+  const [seriesNo, setSeriesNo] = useState(product?.seriesNo || "");
   const [category, setCategory] = useState<CategoryKey>(
     product?.category ? normalizeCategoryKey(product.category) : "breakfast"
   );
@@ -160,6 +162,7 @@ export default function ProductFormModal({
     if (product) {
       setName(product.name || "");
       setSlug(product.slug || "");
+      setSeriesNo(product.seriesNo || "");
       setCategory(normalizeCategoryKey(product.category || "breakfast"));
       setSubtitle(product.subtitle || "");
       setShortDescription(product.shortDescription || "");
@@ -195,6 +198,7 @@ export default function ProductFormModal({
       // Clean initialization for Add New Product: everything starts empty
       setName("");
       setSlug("");
+      setSeriesNo("");
       setCategory("breakfast");
       setSubtitle("");
       setShortDescription("");
@@ -346,6 +350,12 @@ export default function ProductFormModal({
         return;
       }
 
+      if (!isEditing && !seriesNo.trim()) {
+        setError("Series No. is required for new products (e.g. PLTR.001).");
+        setLoading(false);
+        return;
+      }
+
       if (!price.trim() || isNaN(parseFloat(price)) || parseFloat(price) < 0) {
         setError("Please enter a valid non-negative selling price.");
         setLoading(false);
@@ -384,6 +394,9 @@ export default function ProductFormModal({
       // Basic Information
       fd.append("name", name.trim());
       fd.append("slug", slug.trim());
+      if (seriesNo.trim()) {
+        fd.append("seriesNo", normalizeSeriesNo(seriesNo));
+      }
       fd.append("category", category);
       fd.append("subtitle", subtitle.trim());
       fd.append("shortDescription", shortDescription.trim());
@@ -502,8 +515,24 @@ export default function ProductFormModal({
               <span className="text-[11px] text-stone-500 font-medium">Public Identifiers</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="sm:col-span-1">
+                <label className="block text-[12px] font-heading font-semibold uppercase tracking-[0.06em] text-[#1E3A2E] mb-1.5 flex items-center justify-between">
+                  <span>Series No. {!isEditing && <span className="text-red-600">*</span>}</span>
+                  <span className="text-[10px] font-mono text-[#6B8F56] font-semibold">e.g. PLTR.001</span>
+                </label>
+                <input
+                  type="text"
+                  required={!isEditing}
+                  value={seriesNo}
+                  onChange={(e) => setSeriesNo(e.target.value)}
+                  onBlur={(e) => setSeriesNo(normalizeSeriesNo(e.target.value))}
+                  placeholder="PLTR.001"
+                  className="w-full px-3.5 py-2.5 text-[14px] font-mono uppercase tracking-wider bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
+                />
+              </div>
+
+              <div className="sm:col-span-1">
                 <label className="block text-[12px] font-heading font-semibold uppercase tracking-[0.06em] text-[#1E3A2E] mb-1.5">
                   Product Name *
                 </label>
@@ -517,9 +546,9 @@ export default function ProductFormModal({
                 />
               </div>
 
-              <div>
+              <div className="sm:col-span-1">
                 <label className="block text-[12px] font-heading font-semibold uppercase tracking-[0.06em] text-[#1E3A2E] mb-1.5">
-                  URL Slug (Auto-generated) *
+                  URL Slug (Auto) *
                 </label>
                 <input
                   type="text"

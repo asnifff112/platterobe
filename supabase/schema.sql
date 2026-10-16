@@ -62,17 +62,22 @@ CREATE TABLE IF NOT EXISTS public.products (
     available BOOLEAN NOT NULL DEFAULT TRUE,
     category TEXT NOT NULL DEFAULT 'breakfast' REFERENCES public.categories(id) ON UPDATE CASCADE ON DELETE SET DEFAULT,
     weight TEXT DEFAULT '',
+    series_no TEXT,
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
--- Performance Indexes (Idempotent)
+-- Backward-compatible column addition for pre-existing tables
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS series_no TEXT;
+
+-- Performance & Unique Indexes (Idempotent)
 CREATE INDEX IF NOT EXISTS idx_products_slug ON public.products(slug);
 CREATE INDEX IF NOT EXISTS idx_products_available ON public.products(available);
 CREATE INDEX IF NOT EXISTS idx_products_category ON public.products(category);
 CREATE INDEX IF NOT EXISTS idx_products_featured ON public.products(is_featured);
 CREATE INDEX IF NOT EXISTS idx_products_sort_order ON public.products(sort_order);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_products_series_no ON public.products (UPPER(TRIM(series_no))) WHERE series_no IS NOT NULL AND TRIM(series_no) <> '';
 
 -- ==============================================================================
 -- 4. Administrators Table (Protected Admin Credentials)
