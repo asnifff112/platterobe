@@ -5,6 +5,18 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   serverExternalPackages: ["better-sqlite3"],
+  async rewrites() {
+    return {
+      beforeFiles: [
+        {
+          source: "/index",
+          destination: "/product-index",
+        },
+      ],
+      afterFiles: [],
+      fallback: [],
+    };
+  },
   images: {
     localPatterns: [
       { pathname: "/images/**", search: "" },
