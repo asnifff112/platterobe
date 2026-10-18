@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 import bcrypt from "bcryptjs";
-import { Product, products as initialProducts, Ingredient } from "@/data/products";
+import { Product, products as initialProducts, Ingredient, Nutrition } from "@/data/products";
 import { normalizeCategoryKey } from "@/data/categories";
 import { getSupabaseAdminClient, isSupabaseConfigured } from "@/lib/supabase";
 import { normalizeSeriesNo } from "@/lib/series";
@@ -277,24 +277,45 @@ function mapRowToProduct(row: ProductRow): Product {
     }
   }
 
-  let nutrition = {
+  let nutrition: Nutrition = {
     calories: null,
     protein: null,
     carbs: null,
     fat: null,
     fiber: null,
   };
+  let rawSeriesFromNutrition: string | null = null;
   if (row.nutrition && typeof row.nutrition === "object") {
-    nutrition = { ...nutrition, ...(row.nutrition as typeof nutrition) };
+    const nutObj = row.nutrition as Record<string, unknown>;
+    if (nutObj._series_no && typeof nutObj._series_no === "string") {
+      rawSeriesFromNutrition = nutObj._series_no;
+    }
+    nutrition = {
+      calories: typeof nutObj.calories === "number" ? nutObj.calories : null,
+      protein: typeof nutObj.protein === "string" ? nutObj.protein : null,
+      carbs: typeof nutObj.carbs === "string" ? nutObj.carbs : null,
+      fat: typeof nutObj.fat === "string" ? nutObj.fat : null,
+      fiber: typeof nutObj.fiber === "string" ? nutObj.fiber : null,
+    };
   } else if (typeof row.nutrition === "string") {
     try {
-      nutrition = { ...nutrition, ...JSON.parse(row.nutrition) };
+      const nutObj = JSON.parse(row.nutrition);
+      if (nutObj._series_no && typeof nutObj._series_no === "string") {
+        rawSeriesFromNutrition = nutObj._series_no;
+      }
+      nutrition = {
+        calories: typeof nutObj.calories === "number" ? nutObj.calories : null,
+        protein: typeof nutObj.protein === "string" ? nutObj.protein : null,
+        carbs: typeof nutObj.carbs === "string" ? nutObj.carbs : null,
+        fat: typeof nutObj.fat === "string" ? nutObj.fat : null,
+        fiber: typeof nutObj.fiber === "string" ? nutObj.fiber : null,
+      };
     } catch {
       // default
     }
   }
 
-  const rawSeries = row.series_no || row.seriesNo;
+  const rawSeries = row.series_no || row.seriesNo || rawSeriesFromNutrition;
   const seriesNo = rawSeries && rawSeries.trim().length > 0 ? normalizeSeriesNo(rawSeries) : null;
 
   return {
@@ -511,11 +532,12 @@ export async function getProductBySeriesNo(seriesNo: string): Promise<Product | 
   const query = seriesNo ? seriesNo.trim() : "";
   if (!query) return undefined;
 
-  // 1. Supabase PostgreSQL is the authoritative source when configured
+  // 1. Supabase PostgreSQL is the authoritative live source when configured
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdminClient();
       if (supabase) {
+        // Direct column search if series_no column exists
         const { data, error } = await supabase
           .from("products")
           .select("*")
@@ -525,8 +547,21 @@ export async function getProductBySeriesNo(seriesNo: string): Promise<Product | 
         if (!error && data) {
           return mapRowToProduct(data);
         }
-        if (error && error.code !== "42703") {
-          console.warn("Supabase query error in getProductBySeriesNo; using fallback:", error.message);
+
+        // Search live Supabase rows (handles dual nutrition._series_no storage seamlessly)
+        const { data: allProds, error: allErr } = await supabase
+          .from("products")
+          .select("*");
+
+        if (!allErr && allProds) {
+          for (const row of allProds) {
+            const mapped = mapRowToProduct(row);
+            if (mapped.seriesNo && mapped.seriesNo.trim().toUpperCase() === query.toUpperCase()) {
+              return mapped;
+            }
+          }
+          // Supabase is authoritative and live. If no product matches in Supabase, return undefined.
+          return undefined;
         }
       }
     } catch (supabaseErr) {
@@ -534,24 +569,23 @@ export async function getProductBySeriesNo(seriesNo: string): Promise<Product | 
     }
   }
 
-  // 2. Fallback to Local SQLite
-  try {
-    const db = getDatabase();
-    const row = db
-      .prepare("SELECT * FROM products WHERE UPPER(TRIM(series_no)) = UPPER(?)")
-      .get(query) as ProductRow | undefined;
-    if (row) {
-      return mapRowToProduct(row);
+  // 2. Fallback to Local SQLite (only when Supabase is not configured)
+  if (!isSupabaseConfigured()) {
+    try {
+      const db = getDatabase();
+      const row = db
+        .prepare("SELECT * FROM products WHERE UPPER(TRIM(series_no)) = UPPER(?)")
+        .get(query) as ProductRow | undefined;
+      if (row) {
+        return mapRowToProduct(row);
+      }
+    } catch (err) {
+      console.error("Error fetching product by seriesNo from SQLite database:", err);
     }
-  } catch (err) {
-    console.error("Error fetching product by seriesNo from SQLite database:", err);
   }
 
-  // 3. Fallback to initial products catalog
-  const staticMatch = initialProducts.find(
-    (p) => p.seriesNo && p.seriesNo.trim().toUpperCase() === query.toUpperCase()
-  );
-  return staticMatch;
+  // CRITICAL: NEVER return mock/seed/demo products as fallback
+  return undefined;
 }
 
 export async function createProduct(product: Omit<Product, "id"> & { id?: string }): Promise<Product> {
@@ -565,6 +599,11 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
     try {
       const supabase = getSupabaseAdminClient();
       if (supabase) {
+        const nutritionPayload: Record<string, unknown> = {
+          ...(typeof product.nutrition === "object" && product.nutrition ? product.nutrition : {}),
+          ...(cleanSeriesNo ? { _series_no: cleanSeriesNo } : {}),
+        };
+
         const dbRow: Record<string, unknown> = {
           id,
           slug: product.slug,
@@ -579,7 +618,7 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
           is_featured: Boolean(product.isFeatured),
           image: product.image || "",
           ingredients: product.ingredients || [],
-          nutrition: product.nutrition || {},
+          nutrition: nutritionPayload,
           available: product.available !== undefined ? Boolean(product.available) : true,
           category: validCategory,
           sort_order: sortOrder,
@@ -593,9 +632,9 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
           .select("*")
           .single();
 
-        // Gracefully retry without series_no if column does not exist yet on Supabase
+        // Gracefully retry without series_no column if column does not exist yet on Supabase
         if (error && (error.code === "42703" || error.message?.includes("series_no"))) {
-          console.warn("Supabase products table does not have series_no column yet. Inserting without series_no in Supabase.");
+          console.warn("Supabase products table does not have series_no column yet. Inserting with series_no in nutrition payload.");
           delete dbRow.series_no;
           const retry = await supabase.from("products").insert(dbRow).select("*").single();
           data = retry.data;
@@ -619,7 +658,7 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
               id, product.slug, cleanSeriesNo, product.name, product.subtitle ?? "", product.shortDescription ?? "",
               product.description ?? "", product.whyYoullLikeIt ?? "", product.price ?? null,
               product.originalPrice ?? null, product.isFeatured ? 1 : 0, product.image || "",
-              JSON.stringify(product.ingredients || []), JSON.stringify(product.nutrition || {}),
+              JSON.stringify(product.ingredients || []), JSON.stringify(nutritionPayload),
               product.available ? 1 : 0, validCategory, sortOrder, product.weight ?? ""
             );
           } catch (dbErr: unknown) {
@@ -699,6 +738,15 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
     try {
       const supabase = getSupabaseAdminClient();
       if (supabase) {
+        const nutritionPayload: Record<string, unknown> = {
+          ...(typeof merged.nutrition === "object" && merged.nutrition ? merged.nutrition : {}),
+        };
+        if (cleanSeriesNo) {
+          nutritionPayload._series_no = cleanSeriesNo;
+        } else {
+          delete nutritionPayload._series_no;
+        }
+
         const dbRow: Record<string, unknown> = {
           slug: merged.slug,
           series_no: cleanSeriesNo,
@@ -712,7 +760,7 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
           is_featured: Boolean(merged.isFeatured),
           image: finalImage,
           ingredients: merged.ingredients || [],
-          nutrition: merged.nutrition || {},
+          nutrition: nutritionPayload,
           available: merged.available !== undefined ? Boolean(merged.available) : true,
           category: validCategory,
           sort_order: sortOrder,
@@ -727,9 +775,9 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
           .select("*")
           .single();
 
-        // Gracefully retry without series_no if column does not exist yet on Supabase
+        // Gracefully retry without series_no column if column does not exist yet on Supabase
         if (error && (error.code === "42703" || error.message?.includes("series_no"))) {
-          console.warn("Supabase products table does not have series_no column yet. Updating without series_no in Supabase.");
+          console.warn("Supabase products table does not have series_no column yet. Updating with series_no in nutrition payload.");
           delete dbRow.series_no;
           const retry = await supabase
             .from("products")
@@ -760,7 +808,7 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
               merged.description ?? "", merged.whyYoullLikeIt ?? "", merged.price ?? null,
               merged.originalPrice ?? null, merged.isFeatured ? 1 : 0,
               finalImage, JSON.stringify(merged.ingredients || []),
-              JSON.stringify(merged.nutrition || {}), merged.available ? 1 : 0, validCategory, merged.weight ?? "", sortOrder, id
+              JSON.stringify(nutritionPayload), merged.available ? 1 : 0, validCategory, merged.weight ?? "", sortOrder, id
             );
           } catch (dbErr: unknown) {
             const err = dbErr as { message?: string };
