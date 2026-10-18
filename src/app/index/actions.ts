@@ -48,21 +48,13 @@ export interface LookupResult {
  * Strictly sanitizes output: excludes internal database IDs, user credentials, and admin metadata.
  */
 export async function lookupSeriesAction(rawCode: string): Promise<LookupResult> {
-  const code = normalizeSeriesNo(rawCode);
+  const code = rawCode ? rawCode.trim() : "";
 
   if (!code) {
     return {
       found: false,
       code: "",
-      error: "Please enter a valid series number (e.g. PLTR.001).",
-    };
-  }
-
-  if (!isValidSeriesNo(code)) {
-    return {
-      found: false,
-      code,
-      error: `Invalid format for "${code}". Please enter a valid series code like PLTR.001.`,
+      error: "Please enter your product series number.",
     };
   }
 

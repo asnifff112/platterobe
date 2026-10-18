@@ -1,35 +1,40 @@
 /**
- * Utility functions for PLATTEROBE Product Series Numbers (e.g. "PLTR.001").
+ * Utility functions for PLATTEROBE Product Series Numbers.
+ * Supports any manual custom identifier (e.g. "PLTR.001", "OAT-01", "FRUIT-101", etc.)
+ * while safely handling accidental leading/trailing whitespace.
  */
 
 /**
- * Safely normalizes a product series number:
- * - Trims leading and trailing whitespace
- * - Collapses multiple spaces into single space
- * - Converts to uppercase
- *
- * Example: "  pltr.001  " -> "PLTR.001"
+ * Trims accidental leading and trailing whitespace while preserving exact casing.
  */
-export function normalizeSeriesNo(code: string | null | undefined): string {
+export function sanitizeSeriesNo(code: string | null | undefined): string {
   if (!code) return "";
-  return code.trim().replace(/\s+/g, " ").toUpperCase();
+  return code.trim();
 }
 
 /**
- * Validates whether a series number conforms to PLATTEROBE convention:
- * Supports format like "PLTR.001", "PLTR-001", or alphanumeric codes between 3 and 32 characters.
+ * Normalizes a series number for safe search: trims leading/trailing whitespace.
+ */
+export function normalizeSeriesNo(code: string | null | undefined): string {
+  if (!code) return "";
+  return code.trim();
+}
+
+/**
+ * Validates that a series number is a non-empty string.
+ * Allows ANY custom series identifier chosen by the admin.
  */
 export function isValidSeriesNo(code: string | null | undefined): boolean {
   if (!code) return false;
-  const normalized = normalizeSeriesNo(code);
-  // Must be between 3 and 32 characters and contain only uppercase letters, numbers, dots, and hyphens
-  return /^[A-Z0-9.-]{3,32}$/.test(normalized);
+  const trimmed = code.trim();
+  return trimmed.length > 0 && trimmed.length <= 64;
 }
 
 /**
  * Formats a series number for consistent editorial display.
+ * Preserves the exact characters entered by the admin.
  */
 export function formatSeriesNo(code: string | null | undefined): string {
   if (!code) return "";
-  return normalizeSeriesNo(code);
+  return code.trim();
 }

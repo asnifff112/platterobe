@@ -25,8 +25,8 @@ export const siteConfig = {
   },
   nav: [
     { label: "Menu", href: "/menu" },
+    { label: "THE INDEX", href: "/index" },
     { label: "About", href: "/about" },
-    { label: "How It Works", href: "/#how-it-works" },
     { label: "Contact", href: "/contact" },
   ],
 };

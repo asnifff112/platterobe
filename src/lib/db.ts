@@ -508,8 +508,8 @@ export async function getProductById(id: string): Promise<Product | undefined> {
 }
 
 export async function getProductBySeriesNo(seriesNo: string): Promise<Product | undefined> {
-  const normalized = normalizeSeriesNo(seriesNo);
-  if (!normalized) return undefined;
+  const query = seriesNo ? seriesNo.trim() : "";
+  if (!query) return undefined;
 
   // 1. Supabase PostgreSQL is the authoritative source when configured
   if (isSupabaseConfigured()) {
@@ -519,7 +519,7 @@ export async function getProductBySeriesNo(seriesNo: string): Promise<Product | 
         const { data, error } = await supabase
           .from("products")
           .select("*")
-          .ilike("series_no", normalized)
+          .ilike("series_no", query)
           .maybeSingle();
 
         if (!error && data) {
@@ -538,8 +538,8 @@ export async function getProductBySeriesNo(seriesNo: string): Promise<Product | 
   try {
     const db = getDatabase();
     const row = db
-      .prepare("SELECT * FROM products WHERE UPPER(TRIM(series_no)) = ?")
-      .get(normalized) as ProductRow | undefined;
+      .prepare("SELECT * FROM products WHERE UPPER(TRIM(series_no)) = UPPER(?)")
+      .get(query) as ProductRow | undefined;
     if (row) {
       return mapRowToProduct(row);
     }
@@ -549,7 +549,7 @@ export async function getProductBySeriesNo(seriesNo: string): Promise<Product | 
 
   // 3. Fallback to initial products catalog
   const staticMatch = initialProducts.find(
-    (p) => p.seriesNo && normalizeSeriesNo(p.seriesNo) === normalized
+    (p) => p.seriesNo && p.seriesNo.trim().toUpperCase() === query.toUpperCase()
   );
   return staticMatch;
 }
@@ -558,7 +558,7 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
   const id = product.id || String(Date.now());
   const validCategory = normalizeCategoryKey(product.category || "breakfast");
   const sortOrder = product.sortOrder ?? 0;
-  const normalizedSeriesNo = product.seriesNo ? normalizeSeriesNo(product.seriesNo) : null;
+  const cleanSeriesNo = product.seriesNo && product.seriesNo.trim().length > 0 ? product.seriesNo.trim() : null;
 
   // 1. Create in Supabase if configured
   if (isSupabaseConfigured()) {
@@ -568,7 +568,7 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
         const dbRow: Record<string, unknown> = {
           id,
           slug: product.slug,
-          series_no: normalizedSeriesNo,
+          series_no: cleanSeriesNo,
           name: product.name,
           subtitle: product.subtitle ?? "",
           short_description: product.shortDescription ?? "",
@@ -602,6 +602,10 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
           error = retry.error;
         }
 
+        if (error && (error.code === "23505" || error.message?.includes("idx_products_series_no") || error.message?.includes("series_no"))) {
+          throw new Error(`A product with Series No. "${cleanSeriesNo}" already exists. Each product must have a unique Series No.`);
+        }
+
         if (!error && data) {
           // Also sync to local SQLite if writable
           try {
@@ -612,19 +616,22 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
                 price, original_price, is_featured, image, ingredients, nutrition, available, category, sort_order, weight, updated_at
               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
             `).run(
-              id, product.slug, normalizedSeriesNo, product.name, product.subtitle ?? "", product.shortDescription ?? "",
+              id, product.slug, cleanSeriesNo, product.name, product.subtitle ?? "", product.shortDescription ?? "",
               product.description ?? "", product.whyYoullLikeIt ?? "", product.price ?? null,
               product.originalPrice ?? null, product.isFeatured ? 1 : 0, product.image || "",
               JSON.stringify(product.ingredients || []), JSON.stringify(product.nutrition || {}),
               product.available ? 1 : 0, validCategory, sortOrder, product.weight ?? ""
             );
-          } catch {
-            // ignore
+          } catch (dbErr: unknown) {
+            const err = dbErr as { message?: string };
+            if (err?.message?.includes("UNIQUE") && err?.message?.includes("series_no")) {
+              throw new Error(`A product with Series No. "${cleanSeriesNo}" already exists. Each product must have a unique Series No.`);
+            }
           }
 
           const mapped = mapRowToProduct(data);
-          if (normalizedSeriesNo && !mapped.seriesNo) {
-            mapped.seriesNo = normalizedSeriesNo;
+          if (cleanSeriesNo && !mapped.seriesNo) {
+            mapped.seriesNo = cleanSeriesNo;
           }
           return mapped;
         }
@@ -632,7 +639,11 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
           console.warn("Supabase insert error; saving to local database:", error.message);
         }
       }
-    } catch (supabaseErr) {
+    } catch (supabaseErr: unknown) {
+      const err = supabaseErr as { message?: string };
+      if (err?.message?.includes("already exists")) {
+        throw err;
+      }
       console.warn("Supabase insert exception:", supabaseErr);
     }
   }
@@ -649,32 +660,24 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
     INSERT INTO products (
       id, slug, series_no, name, subtitle, shortDescription, description, whyYoullLikeIt,
       price, original_price, is_featured, image, ingredients, nutrition, available, category, sort_order, weight, updated_at
-    ) VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')
-    )
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
   `);
 
-  stmt.run(
-    id,
-    product.slug,
-    normalizedSeriesNo,
-    product.name,
-    product.subtitle ?? "",
-    product.shortDescription ?? "",
-    product.description ?? "",
-    product.whyYoullLikeIt ?? "",
-    product.price ?? null,
-    product.originalPrice ?? null,
-    product.isFeatured ? 1 : 0,
-    product.image || "",
-    JSON.stringify(product.ingredients || []),
-    JSON.stringify(product.nutrition || {}),
-    product.available ? 1 : 0,
-    validCategory,
-    computedOrder,
-    product.weight ?? ""
-  );
-
+  try {
+    stmt.run(
+      id, product.slug, cleanSeriesNo, product.name, product.subtitle ?? "", product.shortDescription ?? "",
+      product.description ?? "", product.whyYoullLikeIt ?? "", product.price ?? null,
+      product.originalPrice ?? null, product.isFeatured ? 1 : 0, product.image || "",
+      JSON.stringify(product.ingredients || []), JSON.stringify(product.nutrition || {}),
+      product.available ? 1 : 0, validCategory, computedOrder, product.weight ?? ""
+    );
+  } catch (err: unknown) {
+    const dbErr = err as { message?: string };
+    if (dbErr?.message?.includes("UNIQUE") && dbErr?.message?.includes("series_no")) {
+      throw new Error(`A product with Series No. "${cleanSeriesNo}" already exists. Each product must have a unique Series No.`);
+    }
+    throw err;
+  }
   const created = (await getProductById(id))!;
   return created;
 }
@@ -687,9 +690,9 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
   const validCategory = normalizeCategoryKey(merged.category || "breakfast");
   const sortOrder = merged.sortOrder !== undefined ? merged.sortOrder : (existing.sortOrder ?? 0);
   const finalImage = merged.image || existing.image || "";
-  const normalizedSeriesNo = merged.seriesNo !== undefined
-    ? (merged.seriesNo ? normalizeSeriesNo(merged.seriesNo) : null)
-    : (existing.seriesNo ? normalizeSeriesNo(existing.seriesNo) : null);
+  const cleanSeriesNo = merged.seriesNo !== undefined
+    ? (merged.seriesNo && merged.seriesNo.trim().length > 0 ? merged.seriesNo.trim() : null)
+    : (existing.seriesNo && existing.seriesNo.trim().length > 0 ? existing.seriesNo.trim() : null);
 
   // 1. Update in Supabase if configured
   if (isSupabaseConfigured()) {
@@ -698,7 +701,7 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
       if (supabase) {
         const dbRow: Record<string, unknown> = {
           slug: merged.slug,
-          series_no: normalizedSeriesNo,
+          series_no: cleanSeriesNo,
           name: merged.name,
           subtitle: merged.subtitle ?? "",
           short_description: merged.shortDescription ?? "",
@@ -738,6 +741,10 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
           error = retry.error;
         }
 
+        if (error && (error.code === "23505" || error.message?.includes("idx_products_series_no") || error.message?.includes("series_no"))) {
+          throw new Error(`A product with Series No. "${cleanSeriesNo}" already exists. Each product must have a unique Series No.`);
+        }
+
         if (!error && data) {
           // Sync to SQLite
           try {
@@ -749,19 +756,22 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
                 available = ?, category = ?, weight = ?, sort_order = ?, updated_at = datetime('now')
               WHERE id = ?
             `).run(
-              merged.slug, normalizedSeriesNo, merged.name, merged.subtitle ?? "", merged.shortDescription ?? "",
+              merged.slug, cleanSeriesNo, merged.name, merged.subtitle ?? "", merged.shortDescription ?? "",
               merged.description ?? "", merged.whyYoullLikeIt ?? "", merged.price ?? null,
               merged.originalPrice ?? null, merged.isFeatured ? 1 : 0,
               finalImage, JSON.stringify(merged.ingredients || []),
               JSON.stringify(merged.nutrition || {}), merged.available ? 1 : 0, validCategory, merged.weight ?? "", sortOrder, id
             );
-          } catch {
-            // ignore
+          } catch (dbErr: unknown) {
+            const err = dbErr as { message?: string };
+            if (err?.message?.includes("UNIQUE") && err?.message?.includes("series_no")) {
+              throw new Error(`A product with Series No. "${cleanSeriesNo}" already exists. Each product must have a unique Series No.`);
+            }
           }
 
           const mapped = mapRowToProduct(data);
-          if (normalizedSeriesNo && !mapped.seriesNo) {
-            mapped.seriesNo = normalizedSeriesNo;
+          if (cleanSeriesNo && !mapped.seriesNo) {
+            mapped.seriesNo = cleanSeriesNo;
           }
           return mapped;
         }
@@ -769,7 +779,11 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
           console.warn("Supabase update error; saving to local database:", error.message);
         }
       }
-    } catch (supabaseErr) {
+    } catch (supabaseErr: unknown) {
+      const err = supabaseErr as { message?: string };
+      if (err?.message?.includes("already exists")) {
+        throw err;
+      }
       console.warn("Supabase update exception:", supabaseErr);
     }
   }
@@ -799,26 +813,34 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
     WHERE id = ?
   `);
 
-  stmt.run(
-    merged.slug,
-    normalizedSeriesNo,
-    merged.name,
-    merged.subtitle ?? "",
-    merged.shortDescription ?? "",
-    merged.description ?? "",
-    merged.whyYoullLikeIt ?? "",
-    merged.price ?? null,
-    merged.originalPrice ?? null,
-    merged.isFeatured ? 1 : 0,
-    finalImage,
-    JSON.stringify(merged.ingredients || []),
-    JSON.stringify(merged.nutrition || {}),
-    merged.available ? 1 : 0,
-    validCategory,
-    merged.weight ?? "",
-    sortOrder,
-    id
-  );
+  try {
+    stmt.run(
+      merged.slug,
+      cleanSeriesNo,
+      merged.name,
+      merged.subtitle ?? "",
+      merged.shortDescription ?? "",
+      merged.description ?? "",
+      merged.whyYoullLikeIt ?? "",
+      merged.price ?? null,
+      merged.originalPrice ?? null,
+      merged.isFeatured ? 1 : 0,
+      finalImage,
+      JSON.stringify(merged.ingredients || []),
+      JSON.stringify(merged.nutrition || {}),
+      merged.available ? 1 : 0,
+      validCategory,
+      merged.weight ?? "",
+      sortOrder,
+      id
+    );
+  } catch (err: unknown) {
+    const dbErr = err as { message?: string };
+    if (dbErr?.message?.includes("UNIQUE") && dbErr?.message?.includes("series_no")) {
+      throw new Error(`A product with Series No. "${cleanSeriesNo}" already exists. Each product must have a unique Series No.`);
+    }
+    throw err;
+  }
 
   const updatedProduct = await getProductById(id);
   return updatedProduct;

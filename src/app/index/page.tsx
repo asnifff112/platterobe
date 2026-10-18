@@ -3,16 +3,18 @@ export const instant = false;
 import { connection } from "next/server";
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
 import IndexClient from "./IndexClient";
 import { lookupSeriesAction, type LookupResult } from "./actions";
 
 export const metadata: Metadata = {
   title: "THE PLATTEROBE INDEX — Platter Verification & Specifications",
   description:
-    "Verify PLATTEROBE platter authenticity, inspect fresh whole-food ingredients, and review kitchen nutritional macros.",
+    "Search any platter's unique series number to inspect authentic ingredients, verified kitchen macros, and genuine specifications.",
   robots: {
-    index: false,
-    follow: false,
+    index: true,
+    follow: true,
   },
 };
 
@@ -31,14 +33,20 @@ export default async function ProductIndexPage({ searchParams }: PageProps) {
   }
 
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-white flex items-center justify-center p-6 text-stone-400 font-heading text-[13px] uppercase tracking-wider">
-          Loading PLATTEROBE Index...
-        </div>
-      }
-    >
-      <IndexClient initialCode={initialCode} initialResult={initialResult} />
-    </Suspense>
+    <>
+      <Navbar />
+      <main id="main-content" className="pt-20 md:pt-24 min-h-[calc(100vh-160px)] bg-[#FFFFFF]">
+        <Suspense
+          fallback={
+            <div className="min-h-[50vh] flex items-center justify-center p-6 text-stone-400 font-heading text-[13px] uppercase tracking-wider">
+              Loading PLATTEROBE Index...
+            </div>
+          }
+        >
+          <IndexClient initialCode={initialCode} initialResult={initialResult} />
+        </Suspense>
+      </main>
+      <Footer />
+    </>
   );
 }

@@ -36,6 +36,12 @@ export default function Navbar() {
 
   const navLinks = siteConfig.nav;
 
+  const isLinkActive = (href: string) => {
+    if (pathname === href) return true;
+    if (href === "/index" && (pathname === "/index" || pathname === "/product-index")) return true;
+    return false;
+  };
+
   return (
     <>
       <header
@@ -71,8 +77,8 @@ export default function Navbar() {
                   key={link.href}
                   href={link.href}
                   className={`text-[12px] lg:text-[13px] tracking-[0.08em] uppercase font-heading font-semibold transition-colors duration-150 hover:text-[#6B8F56] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A2E] rounded-[4px] py-1 ${
-                    pathname === link.href
-                      ? "text-[#1E3A2E]"
+                    isLinkActive(link.href)
+                      ? "text-[#1E3A2E] font-bold"
                       : "text-[#1A1A1A]/70"
                   }`}
                 >
@@ -123,8 +129,8 @@ export default function Navbar() {
                 key={link.href}
                 href={link.href}
                 className={`text-[24px] font-heading font-700 tracking-[-0.02em] py-4 border-b border-stone-200/60 transition-colors ${
-                  pathname === link.href
-                    ? "text-[#1E3A2E]"
+                  isLinkActive(link.href)
+                    ? "text-[#1E3A2E] font-bold"
                     : "text-[#1A1A1A]/80"
                 }`}
               >

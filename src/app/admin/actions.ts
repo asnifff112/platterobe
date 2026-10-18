@@ -232,23 +232,23 @@ export async function upsertProductAction(formData: FormData) {
 
     // Series No. handling and uniqueness check
     const seriesNoRaw = formData.get("seriesNo") as string | null;
-    const seriesNo = seriesNoRaw && seriesNoRaw.trim().length > 0 ? normalizeSeriesNo(seriesNoRaw) : null;
+    const seriesNo = seriesNoRaw && seriesNoRaw.trim().length > 0 ? seriesNoRaw.trim() : null;
 
     if (!id && !seriesNo) {
-      return { error: "Series No. is required for new products (e.g. PLTR.001)." };
+      return { error: "Series No. is required for new products." };
     }
 
     if (seriesNo) {
       if (!isValidSeriesNo(seriesNo)) {
         return {
-          error: `Invalid Series No. format "${seriesNo}". Must be 3 to 32 characters using letters, numbers, dots, or hyphens (e.g. PLTR.001).`,
+          error: "Series No. must be 64 characters or fewer.",
         };
       }
 
       const existingWithSeries = await getProductBySeriesNo(seriesNo);
       if (existingWithSeries && existingWithSeries.id !== id) {
         return {
-          error: `A product with Series No. "${seriesNo}" already exists ("${existingWithSeries.name}"). Series No. must be unique across all platters.`,
+          error: `A product with Series No. "${seriesNo}" already exists ("${existingWithSeries.name}"). Each product must have a unique Series No.`,
         };
       }
     }
