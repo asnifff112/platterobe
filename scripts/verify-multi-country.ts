@@ -1,3 +1,20 @@
+import fs from "fs";
+import path from "path";
+
+try {
+  const envPath = path.resolve(process.cwd(), ".env.local");
+  if (fs.existsSync(envPath)) {
+    for (const line of fs.readFileSync(envPath, "utf-8").split("\n")) {
+      const t = line.trim();
+      if (!t || t.startsWith("#")) continue;
+      const idx = t.indexOf("=");
+      if (idx !== -1) process.env[t.slice(0, idx).trim()] = t.slice(idx + 1).trim().replace(/^['"]|['"]$/g, "");
+    }
+  }
+} catch (e) {
+  // ignore
+}
+
 import {
   formatPrice,
   getCountryPrice,
@@ -35,7 +52,7 @@ async function runTests() {
   // 2. formatPrice formatting
   console.log("\n--- TEST 2: Price Formatting ---");
   assert(formatPrice(79, "IN") === "₹79", "INR 79 formats to ₹79");
-  assert(formatPrice(12, "AE") === "AED 12", "AED 12 formats to AED 12");
+  assert(formatPrice(12, "AE") === "AED 12.00", "AED 12 formats to AED 12.00");
   assert(formatPrice(12.5, "AE") === "AED 12.50", "AED 12.5 formats to AED 12.50");
   assert(formatPrice(null, "IN") === "Price on request", "null price returns 'Price on request'");
 

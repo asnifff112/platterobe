@@ -71,7 +71,7 @@ export function getCountryOriginalPrice(product: Product, country: CountryCode):
 export function formatPrice(price: number | null, country: CountryCode): string {
   if (price === null || price === undefined) return "Price on request";
   if (country === "AE") {
-    return `AED ${Number.isInteger(price) ? price : price.toFixed(2)}`;
+    return `AED ${price.toFixed(2)}`;
   }
   // India: match existing format — ₹79 for integers, ₹79.50 for decimals
   return `₹${Number.isInteger(price) ? price : price.toFixed(2)}`;

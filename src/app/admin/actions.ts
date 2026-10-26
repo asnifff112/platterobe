@@ -246,7 +246,11 @@ export async function upsertProductAction(formData: FormData) {
       }
 
       const existingWithSeries = await getProductBySeriesNo(seriesNo);
-      if (existingWithSeries && existingWithSeries.id !== id) {
+      const isSelf = existingWithSeries && (
+        (id && existingWithSeries.id === id) ||
+        (existingWithSeries.slug === slug)
+      );
+      if (existingWithSeries && !isSelf) {
         return {
           error: `A product with Series No. "${seriesNo}" already exists ("${existingWithSeries.name}"). Each product must have a unique Series No.`,
         };
@@ -517,7 +521,14 @@ export async function upsertProductAction(formData: FormData) {
   } catch (err: unknown) {
     console.error("Failed to save product:", err);
     const msg = err instanceof Error ? err.message : "Database error";
-    if (msg.includes("idx_products_series_no") || msg.toLowerCase().includes("unique constraint") || msg.includes("series_no")) {
+    if (msg.includes("already exists")) {
+      return { error: msg };
+    }
+    if (
+      (msg.includes("idx_products_series_no") || msg.includes("products_series_no_key")) &&
+      !msg.includes("schema cache") &&
+      !msg.includes("does not exist")
+    ) {
       return { error: `A product with this Series No. already exists. Please enter a unique Series No.` };
     }
     return { error: `Failed to save product: ${msg}` };

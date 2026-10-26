@@ -316,11 +316,42 @@ function mapRowToProduct(row: ProductRow): Product {
     fiber: null,
   };
   let rawSeriesFromNutrition: string | null = null;
-  if (row.nutrition && typeof row.nutrition === "object") {
-    const nutObj = row.nutrition as Record<string, unknown>;
+  let rawPriceAedFromNutrition: number | null = null;
+  let rawOriginalPriceAedFromNutrition: number | null = null;
+  let rawAvailableInIndiaFromNutrition: boolean | null = null;
+  let rawAvailableInUaeFromNutrition: boolean | null = null;
+  let rawPublishedInIndiaFromNutrition: string | null = null;
+  let rawPublishedInUaeFromNutrition: string | null = null;
+
+  const parseNutObj = (nutObj: Record<string, unknown>) => {
     if (nutObj._series_no && typeof nutObj._series_no === "string") {
       rawSeriesFromNutrition = nutObj._series_no;
     }
+    if (nutObj._price_aed !== undefined && nutObj._price_aed !== null) {
+      const parsed = Number(nutObj._price_aed);
+      if (!isNaN(parsed)) rawPriceAedFromNutrition = parsed;
+    }
+    if (nutObj._original_price_aed !== undefined && nutObj._original_price_aed !== null) {
+      const parsed = Number(nutObj._original_price_aed);
+      if (!isNaN(parsed)) rawOriginalPriceAedFromNutrition = parsed;
+    }
+    if (nutObj._available_in_india !== undefined && nutObj._available_in_india !== null) {
+      rawAvailableInIndiaFromNutrition = Boolean(nutObj._available_in_india);
+    }
+    if (nutObj._available_in_uae !== undefined && nutObj._available_in_uae !== null) {
+      rawAvailableInUaeFromNutrition = Boolean(nutObj._available_in_uae);
+    }
+    if (nutObj._published_in_india && typeof nutObj._published_in_india === "string") {
+      rawPublishedInIndiaFromNutrition = nutObj._published_in_india;
+    }
+    if (nutObj._published_in_uae && typeof nutObj._published_in_uae === "string") {
+      rawPublishedInUaeFromNutrition = nutObj._published_in_uae;
+    }
+  };
+
+  if (row.nutrition && typeof row.nutrition === "object") {
+    const nutObj = row.nutrition as Record<string, unknown>;
+    parseNutObj(nutObj);
     nutrition = {
       calories: typeof nutObj.calories === "number" ? nutObj.calories : null,
       protein: typeof nutObj.protein === "string" ? nutObj.protein : null,
@@ -331,16 +362,16 @@ function mapRowToProduct(row: ProductRow): Product {
   } else if (typeof row.nutrition === "string") {
     try {
       const nutObj = JSON.parse(row.nutrition);
-      if (nutObj._series_no && typeof nutObj._series_no === "string") {
-        rawSeriesFromNutrition = nutObj._series_no;
+      if (nutObj && typeof nutObj === "object") {
+        parseNutObj(nutObj);
+        nutrition = {
+          calories: typeof nutObj.calories === "number" ? nutObj.calories : null,
+          protein: typeof nutObj.protein === "string" ? nutObj.protein : null,
+          carbs: typeof nutObj.carbs === "string" ? nutObj.carbs : null,
+          fat: typeof nutObj.fat === "string" ? nutObj.fat : null,
+          fiber: typeof nutObj.fiber === "string" ? nutObj.fiber : null,
+        };
       }
-      nutrition = {
-        calories: typeof nutObj.calories === "number" ? nutObj.calories : null,
-        protein: typeof nutObj.protein === "string" ? nutObj.protein : null,
-        carbs: typeof nutObj.carbs === "string" ? nutObj.carbs : null,
-        fat: typeof nutObj.fat === "string" ? nutObj.fat : null,
-        fiber: typeof nutObj.fiber === "string" ? nutObj.fiber : null,
-      };
     } catch {
       // default
     }
@@ -353,28 +384,35 @@ function mapRowToProduct(row: ProductRow): Product {
     ? Number(row.price_aed)
     : row.priceAed !== undefined && row.priceAed !== null
     ? Number(row.priceAed)
-    : null;
+    : rawPriceAedFromNutrition;
 
   const originalPriceAed = row.original_price_aed !== undefined && row.original_price_aed !== null
     ? Number(row.original_price_aed)
     : row.originalPriceAed !== undefined && row.originalPriceAed !== null
     ? Number(row.originalPriceAed)
-    : null;
+    : rawOriginalPriceAedFromNutrition;
 
-  const availableInIndia = row.available_in_india !== undefined
+  const availableInIndia = row.available_in_india !== undefined && row.available_in_india !== null
     ? Boolean(row.available_in_india)
-    : row.availableInIndia !== undefined
+    : row.availableInIndia !== undefined && row.availableInIndia !== null
     ? Boolean(row.availableInIndia)
+    : rawAvailableInIndiaFromNutrition !== null
+    ? rawAvailableInIndiaFromNutrition
     : Boolean(row.available);
 
-  const availableInUae = row.available_in_uae !== undefined
+  const availableInUae = row.available_in_uae !== undefined && row.available_in_uae !== null
     ? Boolean(row.available_in_uae)
-    : row.availableInUae !== undefined
+    : row.availableInUae !== undefined && row.availableInUae !== null
     ? Boolean(row.availableInUae)
+    : rawAvailableInUaeFromNutrition !== null
+    ? rawAvailableInUaeFromNutrition
     : false;
 
-  const publishedInIndia = ((row.published_in_india || row.publishedInIndia || "published") as string).toLowerCase() as "draft" | "published" | "unavailable";
-  const publishedInUae = ((row.published_in_uae || row.publishedInUae || "draft") as string).toLowerCase() as "draft" | "published" | "unavailable";
+  const rawPubIn = row.published_in_india || row.publishedInIndia || rawPublishedInIndiaFromNutrition || "published";
+  const publishedInIndia = ((typeof rawPubIn === "string" ? rawPubIn.toLowerCase() : "published") as string) as "draft" | "published" | "unavailable";
+
+  const rawPubUae = row.published_in_uae || row.publishedInUae || rawPublishedInUaeFromNutrition || "draft";
+  const publishedInUae = ((typeof rawPubUae === "string" ? rawPubUae.toLowerCase() : "draft") as string) as "draft" | "published" | "unavailable";
 
   return {
     id: String(row.id),
@@ -598,19 +636,17 @@ export async function getProductBySeriesNo(seriesNo: string): Promise<Product | 
     }
   }
 
-  // 2. Fallback to Local SQLite (only when Supabase is not configured)
-  if (!isSupabaseConfigured()) {
-    try {
-      const db = getDatabase();
-      const row = db
-        .prepare("SELECT * FROM products WHERE UPPER(TRIM(series_no)) = UPPER(?)")
-        .get(query) as ProductRow | undefined;
-      if (row) {
-        return mapRowToProduct(row);
-      }
-    } catch (err) {
-      console.error("Error fetching product by seriesNo from SQLite database:", err);
+  // 2. Fallback to Local SQLite (when not found on Supabase or when Supabase is unconfigured)
+  try {
+    const db = getDatabase();
+    const row = db
+      .prepare("SELECT * FROM products WHERE UPPER(TRIM(series_no)) = UPPER(?)")
+      .get(query) as ProductRow | undefined;
+    if (row) {
+      return mapRowToProduct(row);
     }
+  } catch (err) {
+    console.error("Error fetching product by seriesNo from SQLite database:", err);
   }
 
   // CRITICAL: NEVER return mock/seed/demo products as fallback
@@ -623,23 +659,36 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
   const sortOrder = product.sortOrder ?? 0;
   const cleanSeriesNo = product.seriesNo && product.seriesNo.trim().length > 0 ? product.seriesNo.trim() : null;
 
+  if (cleanSeriesNo) {
+    const existing = await getProductBySeriesNo(cleanSeriesNo);
+    if (existing) {
+      throw new Error(`A product with Series No. "${cleanSeriesNo}" already exists ("${existing.name}"). Each product must have a unique Series No.`);
+    }
+  }
+
+  const availableInIndia = product.availableInIndia !== undefined
+    ? Boolean(product.availableInIndia)
+    : (product.available !== undefined ? Boolean(product.available) : true);
+  const availableInUae = Boolean(product.availableInUae);
+  const publishedInIndia = product.publishedInIndia || "published";
+  const publishedInUae = product.publishedInUae || "draft";
+
+  const nutritionPayload: Record<string, unknown> = {
+    ...(typeof product.nutrition === "object" && product.nutrition ? product.nutrition : {}),
+    ...(cleanSeriesNo ? { _series_no: cleanSeriesNo } : {}),
+    ...(product.priceAed !== undefined ? { _price_aed: product.priceAed } : {}),
+    ...(product.originalPriceAed !== undefined ? { _original_price_aed: product.originalPriceAed } : {}),
+    _available_in_india: availableInIndia,
+    _available_in_uae: availableInUae,
+    _published_in_india: publishedInIndia,
+    _published_in_uae: publishedInUae,
+  };
+
   // 1. Create in Supabase if configured
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdminClient();
       if (supabase) {
-        const nutritionPayload: Record<string, unknown> = {
-          ...(typeof product.nutrition === "object" && product.nutrition ? product.nutrition : {}),
-          ...(cleanSeriesNo ? { _series_no: cleanSeriesNo } : {}),
-        };
-
-        const availableInIndia = product.availableInIndia !== undefined
-          ? Boolean(product.availableInIndia)
-          : (product.available !== undefined ? Boolean(product.available) : true);
-        const availableInUae = Boolean(product.availableInUae);
-        const publishedInIndia = product.publishedInIndia || "published";
-        const publishedInUae = product.publishedInUae || "draft";
-
         const dbRow: Record<string, unknown> = {
           id,
           slug: product.slug,
@@ -674,18 +723,10 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
           .select("*")
           .single();
 
-        // Gracefully retry without series_no column if column does not exist yet on Supabase
-        if (error && (error.code === "42703" || error.message?.includes("series_no"))) {
-          console.warn("Supabase products table does not have series_no column yet. Inserting with series_no in nutrition payload.");
+        // If any unmigrated columns fail on Supabase (e.g. series_no or country columns not yet in schema cache)
+        if (error && (error.code === "42703" || error.code === "PGRST204" || error.message?.includes("schema cache") || error.message?.includes("does not exist"))) {
+          console.warn("Supabase products table missing one or more optional columns. Retrying insert with values safely persisted in nutrition JSON payload.");
           delete dbRow.series_no;
-          const retry = await supabase.from("products").insert(dbRow).select("*").single();
-          data = retry.data;
-          error = retry.error;
-        }
-
-        // Gracefully retry without country columns if columns do not exist yet on Supabase
-        if (error && (error.code === "42703" || error.message?.includes("price_aed") || error.message?.includes("available_in_") || error.message?.includes("published_in_"))) {
-          console.warn("Supabase products table does not have multi-country columns yet. Retrying without them.");
           delete dbRow.price_aed;
           delete dbRow.original_price_aed;
           delete dbRow.available_in_india;
@@ -697,7 +738,15 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
           error = retry.error;
         }
 
-        if (error && (error.code === "23505" || error.message?.includes("idx_products_series_no") || error.message?.includes("series_no"))) {
+        const isUniqueSeriesViolation =
+          Boolean(error) &&
+          (error?.code === "23505" ||
+            error?.message?.includes("idx_products_series_no") ||
+            error?.message?.includes("products_series_no_key")) &&
+          !error?.message?.includes("schema cache") &&
+          !error?.message?.includes("does not exist");
+
+        if (isUniqueSeriesViolation) {
           throw new Error(`A product with Series No. "${cleanSeriesNo}" already exists. Each product must have a unique Series No.`);
         }
 
@@ -796,27 +845,48 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
     ? (merged.seriesNo && merged.seriesNo.trim().length > 0 ? merged.seriesNo.trim() : null)
     : (existing.seriesNo && existing.seriesNo.trim().length > 0 ? existing.seriesNo.trim() : null);
 
+  if (cleanSeriesNo) {
+    const existingWithSeries = await getProductBySeriesNo(cleanSeriesNo);
+    const isSelf = existingWithSeries && (
+      existingWithSeries.id === id ||
+      existingWithSeries.slug === merged.slug
+    );
+    if (existingWithSeries && !isSelf) {
+      throw new Error(`A product with Series No. "${cleanSeriesNo}" already exists ("${existingWithSeries.name}"). Each product must have a unique Series No.`);
+    }
+  }
+
+  const availableInIndia = merged.availableInIndia !== undefined
+    ? Boolean(merged.availableInIndia)
+    : (merged.available !== undefined ? Boolean(merged.available) : true);
+  const availableInUae = Boolean(merged.availableInUae);
+  const publishedInIndia = merged.publishedInIndia || "published";
+  const publishedInUae = merged.publishedInUae || "draft";
+
+  const nutritionPayload: Record<string, unknown> = {
+    ...(typeof merged.nutrition === "object" && merged.nutrition ? merged.nutrition : {}),
+  };
+  if (cleanSeriesNo) {
+    nutritionPayload._series_no = cleanSeriesNo;
+  } else {
+    delete nutritionPayload._series_no;
+  }
+  if (merged.priceAed !== undefined) {
+    nutritionPayload._price_aed = merged.priceAed ?? null;
+  }
+  if (merged.originalPriceAed !== undefined) {
+    nutritionPayload._original_price_aed = merged.originalPriceAed ?? null;
+  }
+  nutritionPayload._available_in_india = availableInIndia;
+  nutritionPayload._available_in_uae = availableInUae;
+  nutritionPayload._published_in_india = publishedInIndia;
+  nutritionPayload._published_in_uae = publishedInUae;
+
   // 1. Update in Supabase if configured
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdminClient();
       if (supabase) {
-        const nutritionPayload: Record<string, unknown> = {
-          ...(typeof merged.nutrition === "object" && merged.nutrition ? merged.nutrition : {}),
-        };
-        if (cleanSeriesNo) {
-          nutritionPayload._series_no = cleanSeriesNo;
-        } else {
-          delete nutritionPayload._series_no;
-        }
-
-        const availableInIndia = merged.availableInIndia !== undefined
-          ? Boolean(merged.availableInIndia)
-          : (merged.available !== undefined ? Boolean(merged.available) : true);
-        const availableInUae = Boolean(merged.availableInUae);
-        const publishedInIndia = merged.publishedInIndia || "published";
-        const publishedInUae = merged.publishedInUae || "draft";
-
         const dbRow: Record<string, unknown> = {
           slug: merged.slug,
           series_no: cleanSeriesNo,
@@ -851,23 +921,10 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
           .select("*")
           .single();
 
-        // Gracefully retry without series_no column if column does not exist yet on Supabase
-        if (error && (error.code === "42703" || error.message?.includes("series_no"))) {
-          console.warn("Supabase products table does not have series_no column yet. Updating with series_no in nutrition payload.");
+        // If any unmigrated columns fail on Supabase (e.g. series_no or country columns not yet in schema cache)
+        if (error && (error.code === "42703" || error.code === "PGRST204" || error.message?.includes("schema cache") || error.message?.includes("does not exist"))) {
+          console.warn("Supabase products table missing one or more optional columns. Retrying update with values safely persisted in nutrition JSON payload.");
           delete dbRow.series_no;
-          const retry = await supabase
-            .from("products")
-            .update(dbRow)
-            .eq("id", id)
-            .select("*")
-            .single();
-          data = retry.data;
-          error = retry.error;
-        }
-
-        // Gracefully retry without country columns if columns do not exist yet on Supabase
-        if (error && (error.code === "42703" || error.message?.includes("price_aed") || error.message?.includes("available_in_") || error.message?.includes("published_in_"))) {
-          console.warn("Supabase products table does not have multi-country columns yet. Updating without them.");
           delete dbRow.price_aed;
           delete dbRow.original_price_aed;
           delete dbRow.available_in_india;
@@ -884,7 +941,15 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
           error = retry.error;
         }
 
-        if (error && (error.code === "23505" || error.message?.includes("idx_products_series_no") || error.message?.includes("series_no"))) {
+        const isUniqueSeriesViolation =
+          Boolean(error) &&
+          (error?.code === "23505" ||
+            error?.message?.includes("idx_products_series_no") ||
+            error?.message?.includes("products_series_no_key")) &&
+          !error?.message?.includes("schema cache") &&
+          !error?.message?.includes("does not exist");
+
+        if (isUniqueSeriesViolation) {
           throw new Error(`A product with Series No. "${cleanSeriesNo}" already exists. Each product must have a unique Series No.`);
         }
 
@@ -899,7 +964,7 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
                 available_in_india = ?, available_in_uae = ?, published_in_india = ?, published_in_uae = ?,
                 is_featured = ?, image = ?, ingredients = ?, nutrition = ?,
                 available = ?, category = ?, weight = ?, sort_order = ?, updated_at = datetime('now')
-              WHERE id = ?
+              WHERE id = ? OR slug = ?
             `).run(
               merged.slug, cleanSeriesNo, merged.name, merged.subtitle ?? "", merged.shortDescription ?? "",
               merged.description ?? "", merged.whyYoullLikeIt ?? "", merged.price ?? null,
@@ -907,7 +972,7 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
               availableInIndia ? 1 : 0, availableInUae ? 1 : 0, publishedInIndia, publishedInUae,
               merged.isFeatured ? 1 : 0,
               finalImage, JSON.stringify(merged.ingredients || []),
-              JSON.stringify(nutritionPayload), merged.available ? 1 : 0, validCategory, merged.weight ?? "", sortOrder, id
+              JSON.stringify(nutritionPayload), merged.available ? 1 : 0, validCategory, merged.weight ?? "", sortOrder, id, merged.slug
             );
           } catch (dbErr: unknown) {
             const err = dbErr as { message?: string };
@@ -963,7 +1028,7 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
       weight = ?,
       sort_order = ?,
       updated_at = datetime('now')
-    WHERE id = ?
+    WHERE id = ? OR slug = ?
   `);
 
   try {
@@ -986,12 +1051,13 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
       merged.isFeatured ? 1 : 0,
       finalImage,
       JSON.stringify(merged.ingredients || []),
-      JSON.stringify(merged.nutrition || {}),
+      JSON.stringify(nutritionPayload),
       merged.available ? 1 : 0,
       validCategory,
       merged.weight ?? "",
       sortOrder,
-      id
+      id,
+      merged.slug
     );
   } catch (err: unknown) {
     const dbErr = err as { message?: string };
