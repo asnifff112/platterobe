@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState, useMemo } from "react";
 import type { Product } from "@/data/products";
@@ -6,6 +6,9 @@ import { MENU_CATEGORIES, normalizeCategoryKey } from "@/data/categories";
 import { siteConfig } from "@/config/site";
 import ProductCard from "./ProductCard";
 import { ArrowRight } from "lucide-react";
+
+import { useCountry } from "@/components/CountryProvider";
+import { isProductVisibleInCountry } from "@/lib/country";
 
 interface ProductGridProps {
   products: Product[];
@@ -32,12 +35,18 @@ export default function ProductGrid({
   const [activeCategory, setActiveCategory] = useState<string>(defaultCategory);
   const sectionRef = useRef<HTMLElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
+  const { country } = useCountry();
+
+  // Filter products by country availability/visibility
+  const countryProducts = useMemo(() => {
+    return products.filter((p) => isProductVisibleInCountry(p, country));
+  }, [products, country]);
 
   // Filter products by active category
   const filteredProducts = useMemo(() => {
-    if (activeCategory === "all") return products;
-    return products.filter((p) => normalizeCategoryKey(p.category) === activeCategory);
-  }, [products, activeCategory]);
+    if (activeCategory === "all") return countryProducts;
+    return countryProducts.filter((p) => normalizeCategoryKey(p.category) === activeCategory);
+  }, [countryProducts, activeCategory]);
 
   const activeCategoryMeta = useMemo(() => {
     return CATEGORY_TABS.find((t) => t.key === activeCategory);

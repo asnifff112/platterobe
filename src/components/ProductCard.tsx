@@ -1,31 +1,45 @@
-﻿import Link from "next/link";
+"use client";
+
+import Link from "next/link";
 import Image from "next/image";
 import type { Product } from "@/data/products";
 import { getProductImageUrl } from "@/data/products";
+import { useCountry } from "@/components/CountryProvider";
+import {
+  getCountryPrice,
+  getCountryOriginalPrice,
+  formatPrice,
+  isProductAvailableInCountry,
+} from "@/lib/country";
 
 interface ProductCardProps {
   product: Product;
 }
 
 export default function ProductCard({ product }: ProductCardProps) {
+  const { country } = useCountry();
   const imageUrl = getProductImageUrl(product.image, product.updatedAt);
 
+  const price = getCountryPrice(product, country);
+  const originalPrice = getCountryOriginalPrice(product, country);
+  const isAvailable = isProductAvailableInCountry(product, country);
+
   const hasDiscount = Boolean(
-    product.originalPrice &&
-      product.price !== null &&
-      product.originalPrice > product.price
+    originalPrice &&
+      price !== null &&
+      originalPrice > price
   );
 
   const discountPercent =
-    hasDiscount && product.originalPrice && product.price !== null
-      ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
+    hasDiscount && originalPrice && price !== null
+      ? Math.round(((originalPrice - price) / originalPrice) * 100)
       : 0;
 
   return (
     <Link
       href={`/product/${product.slug}`}
       className="group flex flex-col h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A2E] focus-visible:ring-offset-2 rounded-[8px]"
-      aria-label={`View ${product.name} — ₹${product.price ?? "N/A"}`}
+      aria-label={`View ${product.name} — ${formatPrice(price, country)}`}
     >
       {/* 1. Product Image Container */}
       <div className="relative aspect-square w-full rounded-[8px] overflow-hidden bg-[#F8F5E9] mb-2.5 sm:mb-3.5">
@@ -49,7 +63,7 @@ export default function ProductCard({ product }: ProductCardProps) {
         )}
 
         {/* Unavailable Overlay */}
-        {!product.available && (
+        {!isAvailable && (
           <div className="absolute inset-0 bg-white/85 flex items-center justify-center p-2 text-center">
             <span className="text-[10px] sm:text-[11px] tracking-[0.08em] uppercase text-[#1A1A1A]/70 font-semibold font-heading">
               Currently Unavailable
@@ -77,13 +91,13 @@ export default function ProductCard({ product }: ProductCardProps) {
           <div className="flex items-baseline gap-1.5">
             {/* Active Selling Price */}
             <span className="font-heading font-800 text-[14px] sm:text-[16px] md:text-[17px] text-[#1E3A2E] tabular-nums">
-              {product.price !== null ? `₹${product.price}` : "Price on request"}
+              {formatPrice(price, country)}
             </span>
 
             {/* Original MRP Strikethrough Price */}
             {hasDiscount && (
               <span className="line-through text-stone-400 text-[11px] sm:text-[12px] font-normal tabular-nums">
-                ₹{product.originalPrice}
+                {formatPrice(originalPrice, country)}
               </span>
             )}
           </div>

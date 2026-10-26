@@ -6,6 +6,7 @@ import { Product, products as initialProducts, Ingredient, Nutrition } from "@/d
 import { normalizeCategoryKey } from "@/data/categories";
 import { getSupabaseAdminClient, isSupabaseConfigured } from "@/lib/supabase";
 import { normalizeSeriesNo } from "@/lib/series";
+import { CountryCode, isProductAvailableInCountry } from "@/lib/country";
 
 const DB_DIR = path.join(process.cwd(), "data");
 const SOURCE_DB_PATH = path.join(DB_DIR, "platterobe.db");
@@ -141,6 +142,24 @@ export function getDatabase(): Database.Database {
       if (!colNames.includes("created_at")) {
         db.exec("ALTER TABLE products ADD COLUMN created_at TEXT NOT NULL DEFAULT (datetime('now'));");
       }
+      if (!colNames.includes("price_aed")) {
+        db.exec("ALTER TABLE products ADD COLUMN price_aed REAL;");
+      }
+      if (!colNames.includes("original_price_aed")) {
+        db.exec("ALTER TABLE products ADD COLUMN original_price_aed REAL;");
+      }
+      if (!colNames.includes("available_in_india")) {
+        db.exec("ALTER TABLE products ADD COLUMN available_in_india INTEGER NOT NULL DEFAULT 1;");
+      }
+      if (!colNames.includes("available_in_uae")) {
+        db.exec("ALTER TABLE products ADD COLUMN available_in_uae INTEGER NOT NULL DEFAULT 0;");
+      }
+      if (!colNames.includes("published_in_india")) {
+        db.exec("ALTER TABLE products ADD COLUMN published_in_india TEXT NOT NULL DEFAULT 'published';");
+      }
+      if (!colNames.includes("published_in_uae")) {
+        db.exec("ALTER TABLE products ADD COLUMN published_in_uae TEXT NOT NULL DEFAULT 'draft';");
+      }
 
       // Initialize Schema for Users / Administrators
       db.exec(`
@@ -253,6 +272,18 @@ interface ProductRow {
   why_youll_like_it?: string;
   price: number | null;
   original_price: number | null;
+  price_aed?: number | null;
+  original_price_aed?: number | null;
+  priceAed?: number | null;
+  originalPriceAed?: number | null;
+  available_in_india?: number | boolean;
+  available_in_uae?: number | boolean;
+  availableInIndia?: number | boolean;
+  availableInUae?: number | boolean;
+  published_in_india?: string;
+  published_in_uae?: string;
+  publishedInIndia?: string;
+  publishedInUae?: string;
   is_featured: number | boolean;
   image: string;
   ingredients: string | Ingredient[];
@@ -318,6 +349,33 @@ function mapRowToProduct(row: ProductRow): Product {
   const rawSeries = row.series_no || row.seriesNo || rawSeriesFromNutrition;
   const seriesNo = rawSeries && rawSeries.trim().length > 0 ? normalizeSeriesNo(rawSeries) : null;
 
+  const priceAed = row.price_aed !== undefined && row.price_aed !== null
+    ? Number(row.price_aed)
+    : row.priceAed !== undefined && row.priceAed !== null
+    ? Number(row.priceAed)
+    : null;
+
+  const originalPriceAed = row.original_price_aed !== undefined && row.original_price_aed !== null
+    ? Number(row.original_price_aed)
+    : row.originalPriceAed !== undefined && row.originalPriceAed !== null
+    ? Number(row.originalPriceAed)
+    : null;
+
+  const availableInIndia = row.available_in_india !== undefined
+    ? Boolean(row.available_in_india)
+    : row.availableInIndia !== undefined
+    ? Boolean(row.availableInIndia)
+    : Boolean(row.available);
+
+  const availableInUae = row.available_in_uae !== undefined
+    ? Boolean(row.available_in_uae)
+    : row.availableInUae !== undefined
+    ? Boolean(row.availableInUae)
+    : false;
+
+  const publishedInIndia = ((row.published_in_india || row.publishedInIndia || "published") as string).toLowerCase() as "draft" | "published" | "unavailable";
+  const publishedInUae = ((row.published_in_uae || row.publishedInUae || "draft") as string).toLowerCase() as "draft" | "published" | "unavailable";
+
   return {
     id: String(row.id),
     slug: String(row.slug),
@@ -329,6 +387,12 @@ function mapRowToProduct(row: ProductRow): Product {
     whyYoullLikeIt: row.why_youll_like_it || row.whyYoullLikeIt || "",
     price: row.price !== null && row.price !== undefined ? Number(row.price) : null,
     originalPrice: row.original_price !== null && row.original_price !== undefined ? Number(row.original_price) : null,
+    priceAed,
+    originalPriceAed,
+    availableInIndia,
+    availableInUae,
+    publishedInIndia,
+    publishedInUae,
     isFeatured: Boolean(row.is_featured),
     image: row.image || "",
     ingredients,
@@ -381,7 +445,7 @@ export async function getAllProducts(): Promise<Product[]> {
   }
 }
 
-export async function getAvailableProducts(): Promise<Product[]> {
+export async function getAvailableProducts(country?: CountryCode): Promise<Product[]> {
   // 1. Supabase PostgreSQL is the authoritative source when configured
   if (isSupabaseConfigured()) {
     try {
@@ -390,13 +454,12 @@ export async function getAvailableProducts(): Promise<Product[]> {
         const { data, error } = await supabase
           .from("products")
           .select("*")
-          .eq("available", true)
           .order("sort_order", { ascending: true })
           .order("created_at", { ascending: true });
 
         if (!error && data) {
-          // Supabase is authoritative — return its result even if empty
-          return data.map(mapRowToProduct);
+          const mapped = data.map(mapRowToProduct);
+          return country ? mapped.filter((p) => isProductAvailableInCountry(p, country)) : mapped.filter((p) => p.available);
         }
         if (error) {
           console.warn("Supabase query error in getAvailableProducts; using fallback:", error.message);
@@ -410,52 +473,18 @@ export async function getAvailableProducts(): Promise<Product[]> {
   // 2. Fallback to Local SQLite (only when Supabase is unavailable or errored)
   try {
     const db = getDatabase();
-    const rows = db.prepare("SELECT * FROM products WHERE available = 1 ORDER BY sort_order ASC, created_at ASC").all() as ProductRow[];
-    return rows.map(mapRowToProduct);
+    const rows = db.prepare("SELECT * FROM products ORDER BY sort_order ASC, created_at ASC").all() as ProductRow[];
+    const mapped = rows.map(mapRowToProduct);
+    return country ? mapped.filter((p) => isProductAvailableInCountry(p, country)) : mapped.filter((p) => p.available);
   } catch (err) {
     console.error("Error fetching available products from SQLite database:", err);
-    return initialProducts.filter((p) => p.available);
+    return country ? initialProducts.filter((p) => isProductAvailableInCountry(p, country)) : initialProducts.filter((p) => p.available);
   }
 }
 
-export async function getFeaturedProducts(): Promise<Product[]> {
-  // 1. Supabase PostgreSQL is the authoritative source when configured
-  if (isSupabaseConfigured()) {
-    try {
-      const supabase = getSupabaseAdminClient();
-      if (supabase) {
-        const { data, error } = await supabase
-          .from("products")
-          .select("*")
-          .eq("is_featured", true)
-          .eq("available", true)
-          .order("sort_order", { ascending: true })
-          .order("created_at", { ascending: true });
-
-        if (!error && data) {
-          // Supabase is authoritative — return its result even if empty
-          return data.map(mapRowToProduct);
-        }
-        if (error) {
-          console.warn("Supabase query error in getFeaturedProducts; using fallback:", error.message);
-        }
-      }
-    } catch (supabaseErr) {
-      console.warn("Supabase exception in getFeaturedProducts:", supabaseErr);
-    }
-  }
-
-  // 2. Fallback to Local SQLite (only when Supabase is unavailable or errored)
-  try {
-    const db = getDatabase();
-    const rows = db
-      .prepare("SELECT * FROM products WHERE is_featured = 1 AND available = 1 ORDER BY sort_order ASC, created_at ASC")
-      .all() as ProductRow[];
-    return rows.map(mapRowToProduct);
-  } catch (err) {
-    console.error("Error fetching featured products from SQLite database:", err);
-    return initialProducts.filter((p) => p.isFeatured && p.available);
-  }
+export async function getFeaturedProducts(country?: CountryCode): Promise<Product[]> {
+  const available = await getAvailableProducts(country);
+  return available.filter((p) => p.isFeatured);
 }
 
 export async function getProductBySlug(slug: string): Promise<Product | undefined> {
@@ -604,6 +633,13 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
           ...(cleanSeriesNo ? { _series_no: cleanSeriesNo } : {}),
         };
 
+        const availableInIndia = product.availableInIndia !== undefined
+          ? Boolean(product.availableInIndia)
+          : (product.available !== undefined ? Boolean(product.available) : true);
+        const availableInUae = Boolean(product.availableInUae);
+        const publishedInIndia = product.publishedInIndia || "published";
+        const publishedInUae = product.publishedInUae || "draft";
+
         const dbRow: Record<string, unknown> = {
           id,
           slug: product.slug,
@@ -615,6 +651,12 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
           why_youll_like_it: product.whyYoullLikeIt ?? "",
           price: product.price ?? null,
           original_price: product.originalPrice ?? null,
+          price_aed: product.priceAed ?? null,
+          original_price_aed: product.originalPriceAed ?? null,
+          available_in_india: availableInIndia,
+          available_in_uae: availableInUae,
+          published_in_india: publishedInIndia,
+          published_in_uae: publishedInUae,
           is_featured: Boolean(product.isFeatured),
           image: product.image || "",
           ingredients: product.ingredients || [],
@@ -641,6 +683,20 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
           error = retry.error;
         }
 
+        // Gracefully retry without country columns if columns do not exist yet on Supabase
+        if (error && (error.code === "42703" || error.message?.includes("price_aed") || error.message?.includes("available_in_") || error.message?.includes("published_in_"))) {
+          console.warn("Supabase products table does not have multi-country columns yet. Retrying without them.");
+          delete dbRow.price_aed;
+          delete dbRow.original_price_aed;
+          delete dbRow.available_in_india;
+          delete dbRow.available_in_uae;
+          delete dbRow.published_in_india;
+          delete dbRow.published_in_uae;
+          const retry = await supabase.from("products").insert(dbRow).select("*").single();
+          data = retry.data;
+          error = retry.error;
+        }
+
         if (error && (error.code === "23505" || error.message?.includes("idx_products_series_no") || error.message?.includes("series_no"))) {
           throw new Error(`A product with Series No. "${cleanSeriesNo}" already exists. Each product must have a unique Series No.`);
         }
@@ -652,12 +708,15 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
             db.prepare(`
               INSERT OR REPLACE INTO products (
                 id, slug, series_no, name, subtitle, shortDescription, description, whyYoullLikeIt,
-                price, original_price, is_featured, image, ingredients, nutrition, available, category, sort_order, weight, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                price, original_price, price_aed, original_price_aed, available_in_india, available_in_uae,
+                published_in_india, published_in_uae, is_featured, image, ingredients, nutrition, available, category, sort_order, weight, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
             `).run(
               id, product.slug, cleanSeriesNo, product.name, product.subtitle ?? "", product.shortDescription ?? "",
               product.description ?? "", product.whyYoullLikeIt ?? "", product.price ?? null,
-              product.originalPrice ?? null, product.isFeatured ? 1 : 0, product.image || "",
+              product.originalPrice ?? null, product.priceAed ?? null, product.originalPriceAed ?? null,
+              availableInIndia ? 1 : 0, availableInUae ? 1 : 0, publishedInIndia, publishedInUae,
+              product.isFeatured ? 1 : 0, product.image || "",
               JSON.stringify(product.ingredients || []), JSON.stringify(nutritionPayload),
               product.available ? 1 : 0, validCategory, sortOrder, product.weight ?? ""
             );
@@ -698,15 +757,19 @@ export async function createProduct(product: Omit<Product, "id"> & { id?: string
   const stmt = db.prepare(`
     INSERT INTO products (
       id, slug, series_no, name, subtitle, shortDescription, description, whyYoullLikeIt,
-      price, original_price, is_featured, image, ingredients, nutrition, available, category, sort_order, weight, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      price, original_price, price_aed, original_price_aed, available_in_india, available_in_uae,
+      published_in_india, published_in_uae, is_featured, image, ingredients, nutrition, available, category, sort_order, weight, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
   `);
 
   try {
     stmt.run(
       id, product.slug, cleanSeriesNo, product.name, product.subtitle ?? "", product.shortDescription ?? "",
       product.description ?? "", product.whyYoullLikeIt ?? "", product.price ?? null,
-      product.originalPrice ?? null, product.isFeatured ? 1 : 0, product.image || "",
+      product.originalPrice ?? null, product.priceAed ?? null, product.originalPriceAed ?? null,
+      (product.availableInIndia !== false) ? 1 : 0, Boolean(product.availableInUae) ? 1 : 0,
+      product.publishedInIndia || "published", product.publishedInUae || "draft",
+      product.isFeatured ? 1 : 0, product.image || "",
       JSON.stringify(product.ingredients || []), JSON.stringify(product.nutrition || {}),
       product.available ? 1 : 0, validCategory, computedOrder, product.weight ?? ""
     );
@@ -747,6 +810,13 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
           delete nutritionPayload._series_no;
         }
 
+        const availableInIndia = merged.availableInIndia !== undefined
+          ? Boolean(merged.availableInIndia)
+          : (merged.available !== undefined ? Boolean(merged.available) : true);
+        const availableInUae = Boolean(merged.availableInUae);
+        const publishedInIndia = merged.publishedInIndia || "published";
+        const publishedInUae = merged.publishedInUae || "draft";
+
         const dbRow: Record<string, unknown> = {
           slug: merged.slug,
           series_no: cleanSeriesNo,
@@ -757,6 +827,12 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
           why_youll_like_it: merged.whyYoullLikeIt ?? "",
           price: merged.price ?? null,
           original_price: merged.originalPrice ?? null,
+          price_aed: merged.priceAed ?? null,
+          original_price_aed: merged.originalPriceAed ?? null,
+          available_in_india: availableInIndia,
+          available_in_uae: availableInUae,
+          published_in_india: publishedInIndia,
+          published_in_uae: publishedInUae,
           is_featured: Boolean(merged.isFeatured),
           image: finalImage,
           ingredients: merged.ingredients || [],
@@ -789,6 +865,25 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
           error = retry.error;
         }
 
+        // Gracefully retry without country columns if columns do not exist yet on Supabase
+        if (error && (error.code === "42703" || error.message?.includes("price_aed") || error.message?.includes("available_in_") || error.message?.includes("published_in_"))) {
+          console.warn("Supabase products table does not have multi-country columns yet. Updating without them.");
+          delete dbRow.price_aed;
+          delete dbRow.original_price_aed;
+          delete dbRow.available_in_india;
+          delete dbRow.available_in_uae;
+          delete dbRow.published_in_india;
+          delete dbRow.published_in_uae;
+          const retry = await supabase
+            .from("products")
+            .update(dbRow)
+            .eq("id", id)
+            .select("*")
+            .single();
+          data = retry.data;
+          error = retry.error;
+        }
+
         if (error && (error.code === "23505" || error.message?.includes("idx_products_series_no") || error.message?.includes("series_no"))) {
           throw new Error(`A product with Series No. "${cleanSeriesNo}" already exists. Each product must have a unique Series No.`);
         }
@@ -800,13 +895,17 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
             db.prepare(`
               UPDATE products SET
                 slug = ?, series_no = ?, name = ?, subtitle = ?, shortDescription = ?, description = ?, whyYoullLikeIt = ?,
-                price = ?, original_price = ?, is_featured = ?, image = ?, ingredients = ?, nutrition = ?,
+                price = ?, original_price = ?, price_aed = ?, original_price_aed = ?,
+                available_in_india = ?, available_in_uae = ?, published_in_india = ?, published_in_uae = ?,
+                is_featured = ?, image = ?, ingredients = ?, nutrition = ?,
                 available = ?, category = ?, weight = ?, sort_order = ?, updated_at = datetime('now')
               WHERE id = ?
             `).run(
               merged.slug, cleanSeriesNo, merged.name, merged.subtitle ?? "", merged.shortDescription ?? "",
               merged.description ?? "", merged.whyYoullLikeIt ?? "", merged.price ?? null,
-              merged.originalPrice ?? null, merged.isFeatured ? 1 : 0,
+              merged.originalPrice ?? null, merged.priceAed ?? null, merged.originalPriceAed ?? null,
+              availableInIndia ? 1 : 0, availableInUae ? 1 : 0, publishedInIndia, publishedInUae,
+              merged.isFeatured ? 1 : 0,
               finalImage, JSON.stringify(merged.ingredients || []),
               JSON.stringify(nutritionPayload), merged.available ? 1 : 0, validCategory, merged.weight ?? "", sortOrder, id
             );
@@ -849,6 +948,12 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
       whyYoullLikeIt = ?,
       price = ?,
       original_price = ?,
+      price_aed = ?,
+      original_price_aed = ?,
+      available_in_india = ?,
+      available_in_uae = ?,
+      published_in_india = ?,
+      published_in_uae = ?,
       is_featured = ?,
       image = ?,
       ingredients = ?,
@@ -872,6 +977,12 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
       merged.whyYoullLikeIt ?? "",
       merged.price ?? null,
       merged.originalPrice ?? null,
+      merged.priceAed ?? null,
+      merged.originalPriceAed ?? null,
+      (merged.availableInIndia !== false) ? 1 : 0,
+      Boolean(merged.availableInUae) ? 1 : 0,
+      merged.publishedInIndia || "published",
+      merged.publishedInUae || "draft",
       merged.isFeatured ? 1 : 0,
       finalImage,
       JSON.stringify(merged.ingredients || []),

@@ -7,11 +7,16 @@ import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { siteConfig } from "@/config/site";
 
+import { useCountry } from "@/components/CountryProvider";
+import { getCountryConfig } from "@/lib/country";
+
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const pathname = usePathname();
   const menuRef = useRef<HTMLDivElement>(null);
+  const { country, openSelector } = useCountry();
+  const currentConfig = getCountryConfig(country);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 15);
@@ -70,33 +75,58 @@ export default function Navbar() {
               <span>PLATTEROBE</span>
             </Link>
 
-            {/* Desktop Navigation (No WhatsApp button here) */}
-            <nav className="hidden md:flex items-center gap-8 lg:gap-10" aria-label="Main navigation">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={`text-[12px] lg:text-[13px] tracking-[0.08em] uppercase font-heading font-semibold transition-colors duration-150 hover:text-[#6B8F56] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A2E] rounded-[4px] py-1 ${
-                    isLinkActive(link.href)
-                      ? "text-[#1E3A2E] font-bold"
-                      : "text-[#1A1A1A]/70"
-                  }`}
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </nav>
+            {/* Desktop Navigation + Country Selector */}
+            <div className="hidden md:flex items-center gap-8 lg:gap-10">
+              <nav className="flex items-center gap-8 lg:gap-10" aria-label="Main navigation">
+                {navLinks.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={`text-[12px] lg:text-[13px] tracking-[0.08em] uppercase font-heading font-semibold transition-colors duration-150 hover:text-[#6B8F56] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A2E] rounded-[4px] py-1 ${
+                      isLinkActive(link.href)
+                        ? "text-[#1E3A2E] font-bold"
+                        : "text-[#1A1A1A]/70"
+                    }`}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </nav>
 
-            {/* Mobile Menu Toggle */}
-            <button
-              className="md:hidden flex items-center justify-center w-10 h-10 text-[#1E3A2E] rounded-[6px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A2E]"
-              onClick={() => setOpen(!open)}
-              aria-label={open ? "Close navigation menu" : "Open navigation menu"}
-              aria-expanded={open}
-              aria-controls="mobile-menu"
-            >
-              {open ? <X size={22} strokeWidth={1.75} /> : <Menu size={22} strokeWidth={1.75} />}
-            </button>
+              <button
+                type="button"
+                onClick={openSelector}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] border border-stone-200 hover:border-[#1E3A2E] text-[11px] lg:text-[12px] font-heading font-semibold text-[#1E3A2E] transition-colors bg-[#F8F5E9]/60 hover:bg-[#F8F5E9] cursor-pointer"
+                aria-label={`Country: ${currentConfig.name}. Click to change.`}
+                title="Change country"
+              >
+                <span className="text-[13px]">{currentConfig.flag}</span>
+                <span className="uppercase tracking-wider font-bold">{currentConfig.code}</span>
+              </button>
+            </div>
+
+            {/* Mobile Actions: Country button + Menu Toggle */}
+            <div className="md:hidden flex items-center gap-2">
+              <button
+                type="button"
+                onClick={openSelector}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-[6px] border border-stone-200 text-[11px] font-heading font-semibold text-[#1E3A2E] bg-[#F8F5E9]/60"
+                aria-label={`Country: ${currentConfig.name}. Click to change.`}
+              >
+                <span>{currentConfig.flag}</span>
+                <span className="uppercase tracking-wider font-bold">{currentConfig.code}</span>
+              </button>
+
+              <button
+                className="flex items-center justify-center w-10 h-10 text-[#1E3A2E] rounded-[6px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A2E]"
+                onClick={() => setOpen(!open)}
+                aria-label={open ? "Close navigation menu" : "Open navigation menu"}
+                aria-expanded={open}
+                aria-controls="mobile-menu"
+              >
+                {open ? <X size={22} strokeWidth={1.75} /> : <Menu size={22} strokeWidth={1.75} />}
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -139,13 +169,37 @@ export default function Navbar() {
             ))}
           </nav>
 
-          <div className="mt-auto pt-8 border-t border-stone-200/60">
-            <p className="text-[11px] tracking-[0.14em] uppercase text-[#6B8F56] font-heading font-semibold mb-1">
-              Everyday Food, Made Better
-            </p>
-            <p className="text-[13px] text-[#1A1A1A]/50 font-body">
-              {siteConfig.location.display}
-            </p>
+          <div className="mt-auto pt-6 border-t border-stone-200/60 flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                openSelector();
+              }}
+              className="flex items-center justify-between p-3 rounded-[8px] bg-[#F8F5E9] border border-stone-200 text-[#1E3A2E]"
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="text-[22px]">{currentConfig.flag}</span>
+                <div className="text-left">
+                  <p className="text-[13px] font-heading font-bold uppercase">{currentConfig.name}</p>
+                  <p className="text-[11px] text-stone-500 font-body">
+                    Currency: {currentConfig.currency} ({currentConfig.currencySymbol})
+                  </p>
+                </div>
+              </div>
+              <span className="text-[11px] font-heading font-semibold text-[#6B8F56] uppercase tracking-wide">
+                Change →
+              </span>
+            </button>
+
+            <div>
+              <p className="text-[11px] tracking-[0.14em] uppercase text-[#6B8F56] font-heading font-semibold mb-1">
+                Everyday Food, Made Better
+              </p>
+              <p className="text-[13px] text-[#1A1A1A]/50 font-body">
+                {siteConfig.location.display}
+              </p>
+            </div>
           </div>
         </div>
       </div>

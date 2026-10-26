@@ -113,7 +113,7 @@ export default function ProductFormModal({
   const [customImageUrl, setCustomImageUrl] = useState("");
   const [showLibrary, setShowLibrary] = useState(false);
 
-  // SECTION C: Pricing
+  // SECTION C: India Settings 🇮🇳
   const [price, setPrice] = useState(
     product?.price !== null && product?.price !== undefined ? String(product.price) : ""
   );
@@ -122,8 +122,30 @@ export default function ProductFormModal({
       ? String(product.originalPrice)
       : ""
   );
+  const [availableInIndia, setAvailableInIndia] = useState<boolean>(
+    product?.availableInIndia !== undefined ? product.availableInIndia : (product?.available ?? true)
+  );
+  const [publishedInIndia, setPublishedInIndia] = useState<"draft" | "published" | "unavailable">(
+    product?.publishedInIndia || "published"
+  );
 
-  // SECTION D: Nutrition & Weight
+  // SECTION D: UAE Settings 🇦🇪
+  const [priceAed, setPriceAed] = useState(
+    product?.priceAed !== null && product?.priceAed !== undefined ? String(product.priceAed) : ""
+  );
+  const [originalPriceAed, setOriginalPriceAed] = useState(
+    product?.originalPriceAed !== null && product?.originalPriceAed !== undefined
+      ? String(product.originalPriceAed)
+      : ""
+  );
+  const [availableInUae, setAvailableInUae] = useState<boolean>(
+    product?.availableInUae !== undefined ? product.availableInUae : false
+  );
+  const [publishedInUae, setPublishedInUae] = useState<"draft" | "published" | "unavailable">(
+    product?.publishedInUae || "draft"
+  );
+
+  // SECTION E: Nutrition & Weight
   const [weight, setWeight] = useState(product?.weight || "");
   const [calories, setCalories] = useState(
     product?.nutrition?.calories ? String(product.nutrition.calories) : ""
@@ -141,12 +163,12 @@ export default function ProductFormModal({
     product?.nutrition?.fiber ? String(product.nutrition.fiber).replace(/g$/i, "") : ""
   );
 
-  // SECTION E: Ingredients
+  // SECTION F: Ingredients
   const [ingredients, setIngredients] = useState<IngredientRow[]>(
     parseInitialIngredients(product?.ingredients)
   );
 
-  // SECTION F: Product Settings
+  // SECTION G: Display Settings
   const [isFeatured, setIsFeatured] = useState(Boolean(product?.isFeatured));
   const [available, setAvailable] = useState(
     product?.available !== undefined ? product.available : true
@@ -181,6 +203,19 @@ export default function ProductFormModal({
           ? String(product.originalPrice)
           : ""
       );
+      setAvailableInIndia(
+        product.availableInIndia !== undefined ? product.availableInIndia : (product.available ?? true)
+      );
+      setPublishedInIndia(product.publishedInIndia || "published");
+
+      setPriceAed(product.priceAed !== null && product.priceAed !== undefined ? String(product.priceAed) : "");
+      setOriginalPriceAed(
+        product.originalPriceAed !== null && product.originalPriceAed !== undefined
+          ? String(product.originalPriceAed)
+          : ""
+      );
+      setAvailableInUae(product.availableInUae !== undefined ? product.availableInUae : false);
+      setPublishedInUae(product.publishedInUae || "draft");
 
       setWeight(product.weight || "");
       setCalories(product.nutrition?.calories ? String(product.nutrition.calories) : "");
@@ -195,7 +230,7 @@ export default function ProductFormModal({
       setAvailable(product.available !== undefined ? product.available : true);
       setSortOrder(product.sortOrder !== undefined ? String(product.sortOrder) : "");
     } else {
-      // Clean initialization for Add New Product: everything starts empty
+      // Clean initialization for Add New Product: safe defaults
       setName("");
       setSlug("");
       setSeriesNo("");
@@ -213,6 +248,13 @@ export default function ProductFormModal({
 
       setPrice("");
       setOriginalPrice("");
+      setAvailableInIndia(true);
+      setPublishedInIndia("published");
+
+      setPriceAed("");
+      setOriginalPriceAed("");
+      setAvailableInUae(false);
+      setPublishedInUae("draft");
 
       setWeight("");
       setCalories("");
@@ -356,23 +398,58 @@ export default function ProductFormModal({
         return;
       }
 
-      if (!price.trim() || isNaN(parseFloat(price)) || parseFloat(price) < 0) {
-        setError("Please enter a valid non-negative selling price.");
-        setLoading(false);
-        return;
+      // Validate India pricing if active
+      if (publishedInIndia === "published" || availableInIndia) {
+        if (!price.trim() || isNaN(parseFloat(price)) || parseFloat(price) < 0) {
+          setError("Please enter a valid non-negative selling price for India (₹).");
+          setLoading(false);
+          return;
+        }
       }
 
       if (originalPrice.trim()) {
         const orig = parseFloat(originalPrice);
-        const sell = parseFloat(price);
+        const sell = parseFloat(price || "0");
         if (isNaN(orig) || orig <= 0) {
-          setError("Original price must be a valid positive number.");
+          setError("India original price must be a valid positive number.");
           setLoading(false);
           return;
         }
-        if (orig <= sell) {
+        if (price.trim() && orig <= sell) {
           setError(
-            `Original price (₹${orig}) must be greater than selling price (₹${sell}) to display as a discount.`
+            `India original price (₹${orig}) must be greater than selling price (₹${sell}) to display as a discount.`
+          );
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Validate UAE pricing
+      if (publishedInUae === "published" && availableInUae) {
+        if (!priceAed.trim() || isNaN(parseFloat(priceAed)) || parseFloat(priceAed) < 0) {
+          setError("To publish and make a product available in the UAE, please enter its selling price in AED.");
+          setLoading(false);
+          return;
+        }
+      }
+
+      if (priceAed.trim() && (isNaN(parseFloat(priceAed)) || parseFloat(priceAed) < 0)) {
+        setError("Please enter a valid UAE selling price in AED.");
+        setLoading(false);
+        return;
+      }
+
+      if (originalPriceAed.trim()) {
+        const origAed = parseFloat(originalPriceAed);
+        const sellAed = parseFloat(priceAed || "0");
+        if (isNaN(origAed) || origAed <= 0) {
+          setError("UAE original price must be a valid positive number.");
+          setLoading(false);
+          return;
+        }
+        if (priceAed.trim() && origAed <= sellAed) {
+          setError(
+            `UAE original price (AED ${origAed}) must be greater than selling price (AED ${sellAed}) to display as a discount.`
           );
           setLoading(false);
           return;
@@ -405,11 +482,28 @@ export default function ProductFormModal({
       fd.append("description", description.trim());
       fd.append("whyYoullLikeIt", whyYoullLikeIt.trim());
 
-      // Pricing
+      // India Pricing & Publication
       fd.append("price", price.trim());
       if (originalPrice.trim()) {
         fd.append("originalPrice", originalPrice.trim());
       }
+      fd.append("availableInIndia", availableInIndia ? "true" : "false");
+      fd.append("publishedInIndia", publishedInIndia);
+
+      // UAE Pricing & Publication
+      if (priceAed.trim()) {
+        fd.append("priceAed", priceAed.trim());
+      }
+      if (originalPriceAed.trim()) {
+        fd.append("originalPriceAed", originalPriceAed.trim());
+      }
+      fd.append("availableInUae", availableInUae ? "true" : "false");
+      fd.append("publishedInUae", publishedInUae);
+
+      // Settings
+      fd.append("isFeatured", isFeatured ? "true" : "false");
+      fd.append("available", availableInIndia ? "true" : "false");
+      if (sortOrder.trim()) fd.append("sortOrder", sortOrder.trim());
 
       // Nutrition & Weight
       if (weight.trim()) fd.append("weight", weight.trim());
@@ -418,11 +512,6 @@ export default function ProductFormModal({
       if (carbs.trim()) fd.append("carbs", carbs.trim());
       if (fat.trim()) fd.append("fat", fat.trim());
       if (fiber.trim()) fd.append("fiber", fiber.trim());
-
-      // Settings
-      fd.append("isFeatured", isFeatured ? "true" : "false");
-      fd.append("available", available ? "true" : "false");
-      if (sortOrder.trim()) fd.append("sortOrder", sortOrder.trim());
 
       // Image Management
       if (currentSavedImage.trim()) {
@@ -876,20 +965,26 @@ export default function ProductFormModal({
           </div>
 
           {/* ====================================================
-              SECTION C: PRICING
+              SECTION C: INDIA SETTINGS (🇮🇳)
           ==================================================== */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between pb-1.5 border-b border-stone-200">
-              <h3 className="text-[13px] font-heading font-bold uppercase tracking-[0.08em] text-[#1E3A2E]">
-                Section C — Pricing
-              </h3>
-              <span className="text-[11px] text-stone-500 font-medium">Official Menu Rates</span>
+          <div className="space-y-4 p-4 sm:p-5 bg-white border border-stone-200 rounded-[10px] shadow-sm">
+            <div className="flex items-center justify-between pb-2 border-b border-stone-200">
+              <div className="flex items-center gap-2">
+                <h3 className="text-[13px] font-heading font-bold uppercase tracking-[0.08em] text-[#1E3A2E] flex items-center gap-1.5">
+                  <span>Section C — India Settings</span>
+                  <span className="text-[14px]">🇮🇳</span>
+                </h3>
+                <span className="px-2 py-0.5 bg-emerald-100 text-[#1E3A2E] text-[10px] font-heading font-bold uppercase rounded">
+                  Active Market
+                </span>
+              </div>
+              <span className="text-[11px] text-stone-500 font-medium">INR (₹)</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-[12px] font-heading font-semibold uppercase tracking-[0.06em] text-[#1E3A2E] mb-1.5">
-                  Selling Price (₹) *
+                  India Selling Price (₹) *
                 </label>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500 font-bold text-[15px]">
@@ -899,19 +994,18 @@ export default function ProductFormModal({
                     type="number"
                     step="1"
                     min="0"
-                    required
                     value={price}
                     onChange={(e) => setPrice(e.target.value)}
                     placeholder="79"
                     className="w-full pl-8 pr-3.5 py-2.5 text-[15px] font-heading font-bold text-[#1E3A2E] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
                   />
                 </div>
-                <p className="text-[11px] text-stone-500 mt-1">Active customer price charged on order</p>
+                <p className="text-[11px] text-stone-500 mt-1">Active customer price charged in India</p>
               </div>
 
               <div>
                 <label className="block text-[12px] font-heading font-semibold uppercase tracking-[0.06em] text-[#1E3A2E] mb-1.5">
-                  Original Price (₹ MRP Strikethrough)
+                  India Original Price (₹ MRP Strikethrough)
                 </label>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500 font-bold text-[15px]">
@@ -930,15 +1024,156 @@ export default function ProductFormModal({
                 <p className="text-[11px] text-stone-500 mt-1">Optional higher price for &quot;Save %&quot; badge</p>
               </div>
             </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-stone-100">
+              <label className="flex items-center gap-2.5 cursor-pointer p-2.5 bg-stone-50 rounded-[6px] border border-stone-200">
+                <input
+                  type="checkbox"
+                  checked={availableInIndia}
+                  onChange={(e) => {
+                    setAvailableInIndia(e.target.checked);
+                    setAvailable(e.target.checked);
+                  }}
+                  className="w-4 h-4 rounded text-[#1E3A2E] focus:ring-[#1E3A2E]"
+                />
+                <div>
+                  <span className="text-[13px] font-semibold text-stone-800 block">
+                    Available in India
+                  </span>
+                  <span className="text-[11px] text-stone-500 block">
+                    Can be ordered via India WhatsApp
+                  </span>
+                </div>
+              </label>
+
+              <div>
+                <label className="block text-[11px] font-heading font-semibold uppercase tracking-[0.05em] text-stone-600 mb-1">
+                  India Publication Status
+                </label>
+                <select
+                  value={publishedInIndia}
+                  onChange={(e) => setPublishedInIndia(e.target.value as "draft" | "published" | "unavailable")}
+                  className="w-full px-3 py-2 text-[13px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
+                >
+                  <option value="published">Published (Visible in India store)</option>
+                  <option value="draft">Draft (Hidden from India store)</option>
+                  <option value="unavailable">Unavailable (Marked Sold Out)</option>
+                </select>
+              </div>
+            </div>
           </div>
 
           {/* ====================================================
-              SECTION D: NUTRITION & SERVING SIZE
+              SECTION D: UAE SETTINGS (🇦🇪)
+          ==================================================== */}
+          <div className="space-y-4 p-4 sm:p-5 bg-[#F8F5E9]/60 border border-amber-200/80 rounded-[10px] shadow-sm">
+            <div className="flex items-center justify-between pb-2 border-b border-stone-200">
+              <div className="flex items-center gap-2">
+                <h3 className="text-[13px] font-heading font-bold uppercase tracking-[0.08em] text-[#1E3A2E] flex items-center gap-1.5">
+                  <span>Section D — UAE Settings</span>
+                  <span className="text-[14px]">🇦🇪</span>
+                </h3>
+                <span className={`px-2 py-0.5 text-[10px] font-heading font-bold uppercase rounded ${
+                  publishedInUae === "published" && availableInUae
+                    ? "bg-emerald-100 text-emerald-800"
+                    : "bg-amber-100 text-amber-800"
+                }`}>
+                  {publishedInUae === "published" && availableInUae ? "Live in UAE" : "UAE Rollout Controlled"}
+                </span>
+              </div>
+              <span className="text-[11px] text-stone-500 font-medium">AED (Dirhams)</span>
+            </div>
+
+            <p className="text-[12px] text-stone-600 leading-relaxed bg-white/70 p-2.5 rounded border border-stone-200/80">
+              <strong className="text-[#1E3A2E]">UAE Independent Catalog:</strong> Products start safely in <em>Draft</em> mode. This item will only appear in the UAE store if <strong>Available in UAE</strong> is checked, status is set to <strong>Published</strong>, and an AED selling price is set.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[12px] font-heading font-semibold uppercase tracking-[0.06em] text-[#1E3A2E] mb-1.5">
+                  UAE Selling Price (AED)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500 font-bold text-[13px]">
+                    AED
+                  </span>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    value={priceAed}
+                    onChange={(e) => setPriceAed(e.target.value)}
+                    placeholder="12.00"
+                    className="w-full pl-12 pr-3.5 py-2.5 text-[15px] font-heading font-bold text-[#1E3A2E] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
+                  />
+                </div>
+                <p className="text-[11px] text-stone-500 mt-1">Price charged for UAE orders (e.g. 12, 15.5)</p>
+              </div>
+
+              <div>
+                <label className="block text-[12px] font-heading font-semibold uppercase tracking-[0.06em] text-[#1E3A2E] mb-1.5">
+                  UAE Original Price (AED MRP Strikethrough)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500 font-bold text-[13px]">
+                    AED
+                  </span>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    value={originalPriceAed}
+                    onChange={(e) => setOriginalPriceAed(e.target.value)}
+                    placeholder="15.00"
+                    className="w-full pl-12 pr-3.5 py-2.5 text-[15px] font-heading text-stone-600 bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#1E3A2E]"
+                  />
+                </div>
+                <p className="text-[11px] text-stone-500 mt-1">Optional higher price for &quot;Save %&quot; badge in UAE</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-stone-200/60">
+              <label className="flex items-center gap-2.5 cursor-pointer p-2.5 bg-white rounded-[6px] border border-stone-200">
+                <input
+                  type="checkbox"
+                  checked={availableInUae}
+                  onChange={(e) => setAvailableInUae(e.target.checked)}
+                  className="w-4 h-4 rounded text-[#1E3A2E] focus:ring-[#1E3A2E]"
+                />
+                <div>
+                  <span className="text-[13px] font-semibold text-stone-800 block">
+                    Available in UAE
+                  </span>
+                  <span className="text-[11px] text-stone-500 block">
+                    Can be ordered by UAE customers
+                  </span>
+                </div>
+              </label>
+
+              <div>
+                <label className="block text-[11px] font-heading font-semibold uppercase tracking-[0.05em] text-stone-600 mb-1">
+                  UAE Publication Status
+                </label>
+                <select
+                  value={publishedInUae}
+                  onChange={(e) => setPublishedInUae(e.target.value as "draft" | "published" | "unavailable")}
+                  className="w-full px-3 py-2 text-[13px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
+                >
+                  <option value="draft">Draft (Hidden from UAE store)</option>
+                  <option value="published">Published (Visible in UAE store)</option>
+                  <option value="unavailable">Unavailable (Shown as Sold Out in UAE)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* ====================================================
+              SECTION E: NUTRITION & SERVING SIZE
           ==================================================== */}
           <div className="space-y-4">
             <div className="flex items-center justify-between pb-1.5 border-b border-stone-200">
               <h3 className="text-[13px] font-heading font-bold uppercase tracking-[0.08em] text-[#1E3A2E]">
-                Section D — Nutrition & Serving Size
+                Section E — Nutrition & Serving Size
               </h3>
               <span className="text-[11px] text-stone-500 font-medium">Independent Recipe Macros</span>
             </div>
@@ -1008,16 +1243,29 @@ export default function ProductFormModal({
                   className="w-full px-3 py-2 text-[13px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
                 />
               </div>
+
+              <div>
+                <label className="block text-[11px] font-heading font-semibold uppercase text-stone-600 mb-1">
+                  Fiber (g)
+                </label>
+                <input
+                  type="text"
+                  value={fiber}
+                  onChange={(e) => setFiber(e.target.value)}
+                  placeholder="8g"
+                  className="w-full px-3 py-2 text-[13px] bg-white border border-stone-300 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#1E3A2E]"
+                />
+              </div>
             </div>
           </div>
 
           {/* ====================================================
-              SECTION E: DYNAMIC INGREDIENT MANAGEMENT
+              SECTION F: DYNAMIC INGREDIENT MANAGEMENT
           ==================================================== */}
           <div className="space-y-4">
             <div className="flex items-center justify-between pb-1.5 border-b border-stone-200">
               <h3 className="text-[13px] font-heading font-bold uppercase tracking-[0.08em] text-[#1E3A2E]">
-                Section E — Ingredients Management
+                Section F — Ingredients Management
               </h3>
               <span className="text-[11px] text-[#6B8F56] font-medium font-mono">
                 {ingredients.length} items
@@ -1039,7 +1287,7 @@ export default function ProductFormModal({
                 ingredients.map((ing, idx) => (
                   <div
                     key={ing.id}
-                    className="flex items-center gap-2 p-2.5 bg-stone-50 border border-stone-200 rounded-[6px]"
+                    className="flex items-center gap-2 p-2 bg-stone-50 border border-stone-200 rounded-[6px]"
                   >
                     <span className="text-[11px] font-mono text-stone-400 w-5 text-center">
                       {idx + 1}
@@ -1113,26 +1361,14 @@ export default function ProductFormModal({
           </div>
 
           {/* ====================================================
-              SECTION F: SETTINGS & VISIBILITY
+              SECTION G: SETTINGS & VISIBILITY
           ==================================================== */}
           <div className="space-y-4 p-4 bg-stone-50 border border-stone-200 rounded-[8px]">
             <h3 className="text-[12px] font-heading font-bold uppercase tracking-[0.06em] text-[#1E3A2E]">
-              Section F — Settings & Display Controls
+              Section G — Settings & Display Controls
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
-              <label className="flex items-center gap-2.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={available}
-                  onChange={(e) => setAvailable(e.target.checked)}
-                  className="w-4 h-4 rounded text-[#1E3A2E] focus:ring-[#1E3A2E]"
-                />
-                <span className="text-[13px] font-medium text-stone-700">
-                  Available on Menu
-                </span>
-              </label>
-
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
               <label className="flex items-center gap-2.5 cursor-pointer">
                 <input
                   type="checkbox"
@@ -1141,7 +1377,7 @@ export default function ProductFormModal({
                   className="w-4 h-4 rounded text-[#1E3A2E] focus:ring-[#1E3A2E]"
                 />
                 <span className="text-[13px] font-medium text-stone-700">
-                  Featured Platter (Homepage)
+                  Featured Platter (Homepage Showcase)
                 </span>
               </label>
 

@@ -13,6 +13,12 @@ export interface PublicIndexProduct {
   categoryDisplayName: string;
   price: number | null;
   originalPrice: number | null;
+  priceAed?: number | null;
+  originalPriceAed?: number | null;
+  availableInIndia?: boolean;
+  availableInUae?: boolean;
+  publishedInIndia?: string;
+  publishedInUae?: string;
   hasDiscount: boolean;
   discountPercent: number;
   available: boolean;
@@ -87,6 +93,12 @@ export async function lookupSeriesAction(rawCode: string): Promise<LookupResult>
       categoryDisplayName: getCategoryDisplayName(product.category),
       price: product.price,
       originalPrice: product.originalPrice || null,
+      priceAed: product.priceAed ?? null,
+      originalPriceAed: product.originalPriceAed ?? null,
+      availableInIndia: product.availableInIndia,
+      availableInUae: product.availableInUae,
+      publishedInIndia: product.publishedInIndia,
+      publishedInUae: product.publishedInUae,
       hasDiscount,
       discountPercent,
       available: product.available,

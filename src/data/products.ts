@@ -23,8 +23,14 @@ export type Product = {
   shortDescription: string;
   description: string;
   whyYoullLikeIt: string;
-  price: number | null; // Active Selling Price
-  originalPrice?: number | null; // Optional Original/MRP Price (for discount strikethrough)
+  price: number | null; // Active Selling Price (India INR)
+  originalPrice?: number | null; // Optional Original/MRP Price (India INR)
+  priceAed?: number | null; // Active Selling Price (UAE AED)
+  originalPriceAed?: number | null; // Optional Original/MRP Price (UAE AED)
+  availableInIndia?: boolean;
+  availableInUae?: boolean;
+  publishedInIndia?: "draft" | "published" | "unavailable";
+  publishedInUae?: "draft" | "published" | "unavailable";
   isFeatured?: boolean; // Controls display in Featured Platters section
   image: string;
   ingredients: Ingredient[];

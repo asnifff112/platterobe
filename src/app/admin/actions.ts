@@ -399,6 +399,56 @@ export async function upsertProductAction(formData: FormData) {
       fiber: formatGrams(fiberRaw),
     };
 
+    // Parse India Availability & Publication Status
+    const availableInIndia = formData.has("availableInIndia")
+      ? formData.get("availableInIndia") === "on" || formData.get("availableInIndia") === "true"
+      : (formData.get("available") === "on" || formData.get("available") === "true");
+
+    const rawPubIndia = (formData.get("publishedInIndia") as string)?.trim().toLowerCase();
+    const publishedInIndia: "draft" | "published" | "unavailable" =
+      rawPubIndia === "draft" || rawPubIndia === "unavailable" ? rawPubIndia : "published";
+
+    // Parse UAE Selling Price
+    const priceAedRaw = formData.get("priceAed") as string | null;
+    let priceAed: number | null = null;
+    if (priceAedRaw !== null && priceAedRaw !== undefined && priceAedRaw.trim() !== "") {
+      const parsedAed = parseFloat(priceAedRaw.trim());
+      if (isNaN(parsedAed) || parsedAed < 0) {
+        return { error: "Please enter a valid UAE selling price in AED." };
+      }
+      priceAed = parsedAed;
+    }
+
+    // Parse UAE Original Price
+    const originalPriceAedRaw = formData.get("originalPriceAed") as string | null;
+    let originalPriceAed: number | null = null;
+    if (originalPriceAedRaw !== null && originalPriceAedRaw !== undefined && originalPriceAedRaw.trim() !== "") {
+      const parsedOrigAed = parseFloat(originalPriceAedRaw.trim());
+      if (isNaN(parsedOrigAed) || parsedOrigAed < 0) {
+        return { error: "Please enter a valid UAE original price in AED." };
+      }
+      if (priceAed !== null && parsedOrigAed <= priceAed) {
+        return {
+          error: `UAE original price (AED ${parsedOrigAed}) must be greater than UAE selling price (AED ${priceAed}) to qualify as a discount.`,
+        };
+      }
+      originalPriceAed = parsedOrigAed;
+    }
+
+    // Parse UAE Availability & Publication Status
+    const availableInUae =
+      formData.get("availableInUae") === "on" ||
+      formData.get("availableInUae") === "true";
+
+    const rawPubUae = (formData.get("publishedInUae") as string)?.trim().toLowerCase();
+    const publishedInUae: "draft" | "published" | "unavailable" =
+      rawPubUae === "published" || rawPubUae === "unavailable" ? rawPubUae : "draft";
+
+    // Validation: If publishing in UAE and marking available, require priceAed
+    if (availableInUae && publishedInUae === "published" && priceAed === null) {
+      return { error: "To make a product available and published in UAE, please enter its UAE price in AED." };
+    }
+
     if (id) {
       await updateProduct(id, {
         slug,
@@ -410,12 +460,18 @@ export async function upsertProductAction(formData: FormData) {
         whyYoullLikeIt,
         price,
         originalPrice,
+        priceAed,
+        originalPriceAed,
+        availableInIndia,
+        availableInUae,
+        publishedInIndia,
+        publishedInUae,
         isFeatured,
         image: imagePath,
         ingredients,
         nutrition,
         category,
-        available,
+        available: availableInIndia,
         weight,
         sortOrder,
       });
@@ -432,12 +488,18 @@ export async function upsertProductAction(formData: FormData) {
         whyYoullLikeIt,
         price,
         originalPrice,
+        priceAed,
+        originalPriceAed,
+        availableInIndia,
+        availableInUae,
+        publishedInIndia,
+        publishedInUae,
         isFeatured,
         image: imagePath,
         ingredients,
         nutrition,
         category,
-        available,
+        available: availableInIndia,
         weight,
         sortOrder,
       });

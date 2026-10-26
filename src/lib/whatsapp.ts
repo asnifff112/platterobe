@@ -1,4 +1,5 @@
-﻿import { siteConfig } from "@/config/site";
+import { siteConfig } from "@/config/site";
+import { formatPrice, getCountryName, type CountryCode } from "@/lib/country";
 
 export function buildWhatsAppUrl(message: string): string {
   const encoded = encodeURIComponent(message);
@@ -7,10 +8,19 @@ export function buildWhatsAppUrl(message: string): string {
 
 export function buildProductOrderUrl(
   productName: string,
-  price: number | null
+  price: number | null,
+  country?: CountryCode,
+  currencyFormattedPrice?: string
 ): string {
-  const priceLine = price !== null ? `Price: ₹${price}\n\n` : "";
-  const message = `Hi PLATTEROBE!\n\nI'd like to order ${productName}.\n\n${priceLine}Please confirm availability and delivery details.`;
+  let priceLine = "";
+  if (currencyFormattedPrice) {
+    priceLine = `Price: ${currencyFormattedPrice}\n`;
+  } else if (price !== null) {
+    priceLine = `Price: ${country ? formatPrice(price, country) : `₹${price}`}\n`;
+  }
+
+  const countryLine = country ? `Country: ${getCountryName(country)}\n` : "";
+  const message = `Hi PLATTEROBE!\n\nI'd like to order ${productName}.\n\n${countryLine}${priceLine}\nPlease confirm availability and delivery details.`;
 
   return buildWhatsAppUrl(message);
 }

@@ -33,6 +33,7 @@ export default function AdminDashboardClient({
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [countryFilter, setCountryFilter] = useState<"all" | "in" | "ae">("all");
   const [featuredOnly, setFeaturedOnly] = useState(false);
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
@@ -63,16 +64,18 @@ export default function AdminDashboardClient({
       selectedCategory === "all" ||
       normalizeCategoryKey(p.category) === selectedCategory;
     const matchesFeatured = !featuredOnly || Boolean(p.isFeatured);
-    return matchesSearch && matchesCategory && matchesFeatured;
+    const matchesCountry =
+      countryFilter === "all" ||
+      (countryFilter === "in" && (p.availableInIndia ?? p.available)) ||
+      (countryFilter === "ae" && Boolean(p.availableInUae && p.publishedInUae === "published"));
+    return matchesSearch && matchesCategory && matchesFeatured && matchesCountry;
   });
 
   // Metrics
   const totalCount = products.length;
-  const availableCount = products.filter((p) => p.available).length;
+  const indiaLiveCount = products.filter((p) => p.availableInIndia ?? p.available).length;
+  const uaeLiveCount = products.filter((p) => p.availableInUae && p.publishedInUae === "published").length;
   const featuredCount = products.filter((p) => p.isFeatured).length;
-  const prices = products.map((p) => p.price).filter((pr): pr is number => pr !== null);
-  const minPrice = prices.length ? Math.min(...prices) : 0;
-  const maxPrice = prices.length ? Math.max(...prices) : 0;
 
   async function handleToggleStatus(product: Product) {
     setTogglingId(product.id);
@@ -173,19 +176,37 @@ export default function AdminDashboardClient({
             {totalCount}
           </p>
           <p className="text-[12px] text-[#6B8F56] font-body mt-0.5">
-            Saved in SQLite database
+            Master catalog records
           </p>
         </div>
 
         <div className="bg-white p-5 rounded-[10px] border border-stone-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-          <p className="text-[11px] font-heading font-semibold uppercase tracking-[0.08em] text-[#1A1A1A]/50">
-            Available on Menu
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] font-heading font-semibold uppercase tracking-[0.08em] text-[#1A1A1A]/50">
+              India Store 🇮🇳
+            </p>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 bg-emerald-50 text-emerald-800 font-bold rounded">INR ₹</span>
+          </div>
           <p className="text-[28px] font-heading font-800 text-[#1E3A2E] mt-1">
-            {availableCount}
+            {indiaLiveCount}
           </p>
           <p className="text-[12px] text-[#1A1A1A]/50 font-body mt-0.5">
-            {totalCount - availableCount} sold out
+            {totalCount - indiaLiveCount} inactive / sold out
+          </p>
+        </div>
+
+        <div className="bg-white p-5 rounded-[10px] border border-stone-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] font-heading font-semibold uppercase tracking-[0.08em] text-[#1A1A1A]/50">
+              UAE Store 🇦🇪
+            </p>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 bg-amber-50 text-amber-800 font-bold rounded">AED</span>
+          </div>
+          <p className="text-[28px] font-heading font-800 text-[#1E3A2E] mt-1">
+            {uaeLiveCount}
+          </p>
+          <p className="text-[12px] text-[#1A1A1A]/50 font-body mt-0.5">
+            {totalCount - uaeLiveCount} draft / unlaunched
           </p>
         </div>
 
@@ -200,21 +221,9 @@ export default function AdminDashboardClient({
             Active on homepage showcase
           </p>
         </div>
-
-        <div className="bg-white p-5 rounded-[10px] border border-stone-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-          <p className="text-[11px] font-heading font-semibold uppercase tracking-[0.08em] text-[#1A1A1A]/50">
-            Selling Price Range
-          </p>
-          <p className="text-[28px] font-heading font-800 text-[#1E3A2E] mt-1">
-            {prices.length ? `₹${minPrice} - ₹${maxPrice}` : "-"}
-          </p>
-          <p className="text-[12px] text-[#1A1A1A]/50 font-body mt-0.5">
-            Daily essential pricing
-          </p>
-        </div>
       </div>
 
-      {/* Action Bar (Search, Category Filter, Featured Toggle, Add Button) */}
+      {/* Action Bar (Search, Category Filter, Country Filter, Featured Toggle, Add Button) */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
         <div className="flex flex-1 flex-col sm:flex-row items-stretch sm:items-center gap-3">
           {/* Search */}
@@ -233,7 +242,7 @@ export default function AdminDashboardClient({
           </div>
 
           {/* Category filter */}
-          <div className="relative sm:w-52">
+          <div className="relative sm:w-48">
             <Filter
               size={14}
               className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"
@@ -252,12 +261,51 @@ export default function AdminDashboardClient({
             </select>
           </div>
 
+          {/* Country Quick Filters */}
+          <div className="inline-flex rounded-[8px] border border-stone-300 bg-white p-0.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setCountryFilter("all")}
+              className={`px-2.5 py-1.5 text-[11px] font-heading font-semibold rounded-[6px] transition-colors ${
+                countryFilter === "all"
+                  ? "bg-[#1E3A2E] text-white"
+                  : "text-stone-600 hover:text-[#1E3A2E]"
+              }`}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => setCountryFilter("in")}
+              className={`px-2.5 py-1.5 text-[11px] font-heading font-semibold rounded-[6px] transition-colors flex items-center gap-1 ${
+                countryFilter === "in"
+                  ? "bg-[#1E3A2E] text-white"
+                  : "text-stone-600 hover:text-[#1E3A2E]"
+              }`}
+            >
+              <span>🇮🇳</span>
+              <span>India ({indiaLiveCount})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCountryFilter("ae")}
+              className={`px-2.5 py-1.5 text-[11px] font-heading font-semibold rounded-[6px] transition-colors flex items-center gap-1 ${
+                countryFilter === "ae"
+                  ? "bg-[#1E3A2E] text-white"
+                  : "text-stone-600 hover:text-[#1E3A2E]"
+              }`}
+            >
+              <span>🇦🇪</span>
+              <span>UAE ({uaeLiveCount})</span>
+            </button>
+          </div>
+
           {/* Featured Filter Toggle Button */}
           <button
             type="button"
             onClick={() => setFeaturedOnly(!featuredOnly)}
             className={`
-              inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-[8px] text-[12px] font-heading font-semibold transition-all border
+              inline-flex items-center gap-1.5 px-3 py-2 rounded-[8px] text-[12px] font-heading font-semibold transition-all border shrink-0
               ${
                 featuredOnly
                   ? "bg-[#1E3A2E] text-[#F8F5E9] border-[#1E3A2E]"
@@ -295,10 +343,10 @@ export default function AdminDashboardClient({
               <tr className="border-b border-stone-200 bg-[#F8F5E9]/60 text-[11px] font-heading font-bold uppercase tracking-[0.08em] text-[#1E3A2E]">
                 <th className="py-3.5 px-4">Platter</th>
                 <th className="py-3.5 px-4">Category</th>
-                <th className="py-3.5 px-4">Pricing</th>
+                <th className="py-3.5 px-4">Pricing (IN / UAE)</th>
+                <th className="py-3.5 px-4">Markets</th>
                 <th className="py-3.5 px-4">Featured</th>
                 <th className="py-3.5 px-4">Nutrition</th>
-                <th className="py-3.5 px-4">Status</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
@@ -354,23 +402,87 @@ export default function AdminDashboardClient({
                       </span>
                     </td>
 
-                    {/* Pricing (Selling Price & Original Price with Strikethrough) */}
+                    {/* Pricing (India INR & UAE AED) */}
                     <td className="py-3.5 px-4">
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="font-heading font-bold text-[#1E3A2E] text-[14px]">
-                          {item.price !== null ? `₹${item.price}` : "-"}
-                        </span>
-                        {item.originalPrice && item.price !== null && item.originalPrice > item.price && (
-                          <span className="line-through text-stone-400 text-[11px]">
-                            ₹{item.originalPrice}
+                      <div className="flex flex-col gap-1 text-[12px]">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-stone-500 font-mono font-semibold">🇮🇳</span>
+                          <span className="font-heading font-bold text-[#1E3A2E] text-[13px]">
+                            {item.price !== null ? `₹${item.price}` : "-"}
                           </span>
-                        )}
+                          {item.originalPrice && item.price !== null && item.originalPrice > item.price && (
+                            <span className="line-through text-stone-400 text-[10px]">
+                              ₹{item.originalPrice}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-stone-500 font-mono font-semibold">🇦🇪</span>
+                          {item.priceAed !== null && item.priceAed !== undefined ? (
+                            <>
+                              <span className="font-heading font-bold text-[#1E3A2E] text-[13px]">
+                                AED {item.priceAed}
+                              </span>
+                              {item.originalPriceAed && item.originalPriceAed > item.priceAed && (
+                                <span className="line-through text-stone-400 text-[10px]">
+                                  AED {item.originalPriceAed}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-stone-400 text-[11px] italic">Not priced</span>
+                          )}
+                        </div>
                       </div>
-                      {item.originalPrice && item.price !== null && item.originalPrice > item.price && (
-                        <span className="inline-block mt-0.5 text-[10px] font-heading font-bold text-[#6B8F56]">
-                          Save {Math.round(((item.originalPrice - item.price) / item.originalPrice) * 100)}%
+                    </td>
+
+                    {/* Market Availability Status */}
+                    <td className="py-3.5 px-4">
+                      <div className="flex flex-col gap-1.5">
+                        {/* India Toggle */}
+                        <button
+                          onClick={() => handleToggleStatus(item)}
+                          disabled={togglingId === item.id}
+                          className={`
+                            inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-heading font-semibold uppercase tracking-wider
+                            transition-colors cursor-pointer w-fit
+                            ${
+                              (item.availableInIndia ?? item.available)
+                                ? "bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
+                                : "bg-stone-100 text-stone-500 border border-stone-200 hover:bg-stone-200"
+                            }
+                            ${togglingId === item.id ? "opacity-50 cursor-wait" : ""}
+                          `}
+                          title="Click to toggle India menu availability"
+                        >
+                          <span>🇮🇳</span>
+                          <span>{(item.availableInIndia ?? item.available) ? "Live" : "Sold Out"}</span>
+                        </button>
+
+                        {/* UAE Status badge */}
+                        <span
+                          className={`
+                            inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-heading font-semibold uppercase tracking-wider w-fit
+                            ${
+                              item.availableInUae && item.publishedInUae === "published"
+                                ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                : item.publishedInUae === "draft" || !item.publishedInUae
+                                ? "bg-amber-50 text-amber-800 border border-amber-200"
+                                : "bg-stone-100 text-stone-500 border border-stone-200"
+                            }
+                          `}
+                          title={`UAE Status: ${item.publishedInUae || "draft"}`}
+                        >
+                          <span>🇦🇪</span>
+                          <span>
+                            {item.availableInUae && item.publishedInUae === "published"
+                              ? "Live"
+                              : item.publishedInUae === "unavailable"
+                              ? "Sold Out"
+                              : "Draft"}
+                          </span>
                         </span>
-                      )}
+                      </div>
                     </td>
 
                     {/* Featured Platters status toggle */}
@@ -415,37 +527,6 @@ export default function AdminDashboardClient({
                           <span className="text-stone-400">-</span>
                         )}
                       </div>
-                    </td>
-
-                    {/* Availability Status */}
-                    <td className="py-3.5 px-4">
-                      <button
-                        onClick={() => handleToggleStatus(item)}
-                        disabled={togglingId === item.id}
-                        className={`
-                          inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-heading font-semibold uppercase tracking-[0.06em]
-                          transition-colors cursor-pointer
-                          ${
-                            item.available
-                              ? "bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
-                              : "bg-stone-100 text-stone-600 border border-stone-300 hover:bg-stone-200"
-                          }
-                          ${togglingId === item.id ? "opacity-50 cursor-wait" : ""}
-                        `}
-                        title="Click to toggle availability"
-                      >
-                        {item.available ? (
-                          <>
-                            <CheckCircle2 size={12} className="text-emerald-600" />
-                            <span>Available</span>
-                          </>
-                        ) : (
-                          <>
-                            <XCircle size={12} className="text-stone-500" />
-                            <span>Sold Out</span>
-                          </>
-                        )}
-                      </button>
                     </td>
 
                     {/* Action buttons */}

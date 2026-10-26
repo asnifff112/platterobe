@@ -68,8 +68,14 @@ CREATE TABLE IF NOT EXISTS public.products (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
--- Backward-compatible column addition for pre-existing tables
+-- Backward-compatible column additions for pre-existing tables
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS series_no TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS price_aed NUMERIC(10, 2);
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS original_price_aed NUMERIC(10, 2);
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS available_in_india BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS available_in_uae BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS published_in_india TEXT NOT NULL DEFAULT 'published';
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS published_in_uae TEXT NOT NULL DEFAULT 'draft';
 
 -- Performance & Unique Indexes (Idempotent)
 CREATE INDEX IF NOT EXISTS idx_products_slug ON public.products(slug);
@@ -78,6 +84,8 @@ CREATE INDEX IF NOT EXISTS idx_products_category ON public.products(category);
 CREATE INDEX IF NOT EXISTS idx_products_featured ON public.products(is_featured);
 CREATE INDEX IF NOT EXISTS idx_products_sort_order ON public.products(sort_order);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_products_series_no ON public.products (UPPER(TRIM(series_no))) WHERE series_no IS NOT NULL AND TRIM(series_no) <> '';
+CREATE INDEX IF NOT EXISTS idx_products_india_status ON public.products(available_in_india, published_in_india);
+CREATE INDEX IF NOT EXISTS idx_products_uae_status ON public.products(available_in_uae, published_in_uae);
 
 -- ==============================================================================
 -- 4. Administrators Table (Protected Admin Credentials)

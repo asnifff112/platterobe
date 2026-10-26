@@ -59,6 +59,9 @@ export const metadata: Metadata = {
   },
 };
 
+import { CountryProvider } from "@/components/CountryProvider";
+import CountrySelector from "@/components/CountrySelector";
+
 export default function RootLayout({
   children,
 }: {
@@ -67,7 +70,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${manrope.variable} ${inter.variable}`}>
       <body className="min-h-screen bg-white text-[#1A1A1A] font-body antialiased">
-        {children}
+        <CountryProvider>
+          {children}
+          <CountrySelector />
+        </CountryProvider>
       </body>
     </html>
   );

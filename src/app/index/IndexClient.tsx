@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { lookupSeriesAction, type LookupResult } from "./actions";
 import WhatsAppButton from "@/components/WhatsAppButton";
+import { useCountry } from "@/components/CountryProvider";
+import { formatPrice, getCountryName } from "@/lib/country";
 
 interface IndexClientProps {
   initialCode?: string;
@@ -79,6 +81,24 @@ export default function IndexClient({
   }
 
   const product = result?.found ? result.product : undefined;
+  const { country } = useCountry();
+
+  const activePrice = country === "AE" ? product?.priceAed ?? null : product?.price ?? null;
+  const activeOriginalPrice = country === "AE" ? product?.originalPriceAed ?? null : product?.originalPrice ?? null;
+  const isAvailableInCountry = product ? (
+    country === "AE"
+      ? Boolean(product.availableInUae) && product.publishedInUae === "published" && product.priceAed !== null && product.priceAed !== undefined
+      : Boolean(product.availableInIndia !== false) && (product.publishedInIndia === "published" || !product.publishedInIndia) && product.price !== null && product.price !== undefined && product.available
+  ) : false;
+  const hasDiscountInCountry = Boolean(
+    activeOriginalPrice &&
+      activePrice !== null &&
+      activeOriginalPrice > activePrice
+  );
+  const discountPercentInCountry =
+    hasDiscountInCountry && activeOriginalPrice && activePrice !== null
+      ? Math.round(((activeOriginalPrice - activePrice) / activeOriginalPrice) * 100)
+      : 0;
 
   const hasNutrition = Boolean(
     product?.nutrition &&
@@ -219,10 +239,10 @@ export default function IndexClient({
                     sizes="(max-width: 640px) 100vw, 300px"
                   />
 
-                  {product.hasDiscount && (
+                  {hasDiscountInCountry && (
                     <div className="absolute top-2 left-2 z-10">
                       <span className="px-2 py-0.5 rounded-[4px] bg-[#1E3A2E] text-[#F8F5E9] text-[10px] font-heading font-bold uppercase tracking-[0.04em]">
-                        Save {product.discountPercent}%
+                        Save {discountPercentInCountry}%
                       </span>
                     </div>
                   )}
@@ -237,14 +257,14 @@ export default function IndexClient({
                       {product.categoryDisplayName}
                     </span>
 
-                    {product.available ? (
+                    {isAvailableInCountry ? (
                       <span className="inline-flex items-center gap-1 text-[11px] font-heading font-semibold uppercase tracking-[0.06em] text-emerald-700">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
                         <span>Available Today</span>
                       </span>
                     ) : (
                       <span className="text-[11px] font-heading font-semibold uppercase tracking-[0.06em] text-stone-500 bg-stone-100 px-2 py-0.5 rounded">
-                        Sold Out Today
+                        Unavailable in {getCountryName(country)}
                       </span>
                     )}
                   </div>
@@ -262,11 +282,11 @@ export default function IndexClient({
                   {/* Price Row */}
                   <div className="flex items-baseline gap-2 mb-4 flex-wrap">
                     <span className="text-[24px] sm:text-[26px] font-heading font-800 text-[#1E3A2E] tabular-nums">
-                      {product.price !== null ? `₹${product.price}` : "Price on request"}
+                      {formatPrice(activePrice, country)}
                     </span>
-                    {product.hasDiscount && product.originalPrice && (
+                    {hasDiscountInCountry && activeOriginalPrice && (
                       <span className="line-through text-stone-400 text-[15px] font-normal tabular-nums">
-                        ₹{product.originalPrice}
+                        {formatPrice(activeOriginalPrice, country)}
                       </span>
                     )}
                     {product.weight && (
@@ -279,17 +299,18 @@ export default function IndexClient({
 
                 {/* Ordering & Platter Page CTAs */}
                 <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
-                  {product.available ? (
+                  {isAvailableInCountry ? (
                     <WhatsAppButton
                       productName={product.name}
-                      price={product.price}
+                      price={activePrice}
+                      country={country}
                       label="Order on WhatsApp"
                       size="default"
                       className="w-full text-center"
                     />
                   ) : (
                     <div className="w-full text-center py-2.5 px-4 bg-stone-100 border border-stone-200 rounded-[6px] text-stone-500 font-heading font-semibold text-[12px] uppercase">
-                      Platter Unavailable
+                      Unavailable in {getCountryName(country)}
                     </div>
                   )}
 
