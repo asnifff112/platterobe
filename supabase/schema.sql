@@ -266,3 +266,119 @@ GRANT SELECT ON TABLE public.categories TO anon, authenticated;
 GRANT SELECT ON TABLE public.products TO anon, authenticated;
 GRANT INSERT ON TABLE public.orders TO anon, authenticated;
 
+-- ==============================================================================
+-- 9. THE MEAL CLUB TABLES & RLS POLICIES (Supabase PostgreSQL)
+-- ==============================================================================
+
+CREATE TABLE IF NOT EXISTS public.meal_categories (
+    id TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+CREATE TABLE IF NOT EXISTS public.meal_plans (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    subtitle TEXT DEFAULT '',
+    description TEXT DEFAULT '',
+    image TEXT DEFAULT '',
+    duration_days INTEGER NOT NULL DEFAULT 7,
+    meal_categories JSONB NOT NULL DEFAULT '["breakfast"]'::jsonb,
+    meals_per_day INTEGER NOT NULL DEFAULT 1,
+    pricing_mode TEXT NOT NULL DEFAULT 'fixed',
+    base_price NUMERIC(10, 2) NOT NULL DEFAULT 0,
+    base_price_aed NUMERIC(10, 2),
+    original_price NUMERIC(10, 2),
+    original_price_aed NUMERIC(10, 2),
+    status TEXT NOT NULL DEFAULT 'draft',
+    is_featured BOOLEAN NOT NULL DEFAULT FALSE,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    swap_rules JSONB NOT NULL DEFAULT '{}'::jsonb,
+    schedule JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+CREATE TABLE IF NOT EXISTS public.meal_subscriptions (
+    id TEXT PRIMARY KEY,
+    plan_id TEXT NOT NULL,
+    plan_name TEXT NOT NULL,
+    plan_duration INTEGER NOT NULL,
+    pricing_mode TEXT NOT NULL,
+    customer_name TEXT NOT NULL,
+    customer_phone TEXT NOT NULL,
+    customer_email TEXT,
+    delivery_address TEXT NOT NULL,
+    city TEXT NOT NULL,
+    country TEXT NOT NULL DEFAULT 'IN',
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    order_locked BOOLEAN NOT NULL DEFAULT FALSE,
+    locked_at TIMESTAMPTZ,
+    confirmed_at TIMESTAMPTZ,
+    total_amount NUMERIC(10, 2) NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'INR',
+    swaps_used INTEGER NOT NULL DEFAULT 0,
+    max_swaps_allowed INTEGER NOT NULL DEFAULT 0,
+    daily_schedule JSONB NOT NULL DEFAULT '[]'::jsonb,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+CREATE TABLE IF NOT EXISTS public.meal_audit_logs (
+    id TEXT PRIMARY KEY,
+    subscription_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    performed_by TEXT NOT NULL,
+    details JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_meal_plans_status ON public.meal_plans(status);
+CREATE INDEX IF NOT EXISTS idx_meal_plans_slug ON public.meal_plans(slug);
+CREATE INDEX IF NOT EXISTS idx_meal_subscriptions_customer ON public.meal_subscriptions(customer_phone);
+CREATE INDEX IF NOT EXISTS idx_meal_subscriptions_status ON public.meal_subscriptions(status);
+CREATE INDEX IF NOT EXISTS idx_meal_subscriptions_locked ON public.meal_subscriptions(order_locked);
+CREATE INDEX IF NOT EXISTS idx_meal_audit_logs_sub ON public.meal_audit_logs(subscription_id);
+
+-- Enable RLS
+ALTER TABLE public.meal_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.meal_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.meal_subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.meal_audit_logs ENABLE ROW LEVEL SECURITY;
+
+-- Policies
+CREATE POLICY "Public read active meal categories" ON public.meal_categories
+    FOR SELECT USING (is_active = true);
+
+CREATE POLICY "Public read published meal plans" ON public.meal_plans
+    FOR SELECT USING (status = 'published');
+
+CREATE POLICY "Service role full access meal categories" ON public.meal_categories
+    FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+
+CREATE POLICY "Service role full access meal plans" ON public.meal_plans
+    FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+
+CREATE POLICY "Service role full access meal subscriptions" ON public.meal_subscriptions
+    FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+
+CREATE POLICY "Service role full access meal audit logs" ON public.meal_audit_logs
+    FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+
+GRANT ALL ON TABLE public.meal_categories TO service_role;
+GRANT ALL ON TABLE public.meal_plans TO service_role;
+GRANT ALL ON TABLE public.meal_subscriptions TO service_role;
+GRANT ALL ON TABLE public.meal_audit_logs TO service_role;
+GRANT SELECT ON TABLE public.meal_categories TO anon, authenticated;
+GRANT SELECT ON TABLE public.meal_plans TO anon, authenticated;
+
+

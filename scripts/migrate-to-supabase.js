@@ -141,7 +141,13 @@ async function runMigration() {
   console.log("📦 Migrating products to Supabase...");
   let migratedCount = 0;
   for (const product of productsToMigrate) {
-    const { error: prodErr } = await supabase.from("products").upsert(product, { onConflict: "id" });
+    let { error: prodErr } = await supabase.from("products").upsert(product, { onConflict: "id" });
+    if (prodErr && prodErr.message && prodErr.message.includes("series_no")) {
+      const fallback = { ...product };
+      delete fallback.series_no;
+      const res = await supabase.from("products").upsert(fallback, { onConflict: "id" });
+      prodErr = res.error;
+    }
     if (prodErr) {
       console.error(`❌ Error migrating product ${product.name} (${product.slug}):`, prodErr.message);
     } else {
@@ -227,6 +233,142 @@ async function runMigration() {
       console.log(`✅ Successfully synced ${orderCount} existing customer orders to Supabase.`);
     } catch (err) {
       console.warn("Could not read orders from SQLite:", err.message);
+    }
+  }
+
+  // 7. Migrate Meal Club (Categories, Plans, Subscriptions, Audit Logs)
+  console.log("🥗 Synchronizing Meal Club & Subscription System...");
+  if (fs.existsSync(dbPath)) {
+    try {
+      const db = new Database(dbPath);
+      // Ensure tables exist in SQLite
+      const hasMealPlans = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='meal_plans'").get();
+      if (hasMealPlans) {
+        // A. Meal Categories
+        const categories = db.prepare("SELECT * FROM meal_categories").all();
+        let syncedCats = 0;
+        let hasLoggedCatNotice = false;
+        for (const cat of categories) {
+          try {
+            const { error: catErr } = await supabase.from("meal_categories").upsert({
+              id: cat.id,
+              display_name: cat.display_name,
+              description: cat.description || "",
+              sort_order: cat.sort_order || 0,
+              is_active: Boolean(cat.is_active),
+              created_at: cat.created_at,
+              updated_at: cat.updated_at,
+            }, { onConflict: "id" });
+            if (!catErr) syncedCats++;
+            else if (!hasLoggedCatNotice) {
+              hasLoggedCatNotice = true;
+              console.log("  (Supabase note: Meal Club tables will sync automatically once supabase/schema.sql is applied to PostgreSQL)");
+            }
+          } catch {}
+        }
+
+        // B. Meal Plans
+        const plans = db.prepare("SELECT * FROM meal_plans").all();
+        let syncedPlans = 0;
+        for (const pl of plans) {
+          try {
+            let categoriesJson = ["breakfast"];
+            let swapRulesJson = {};
+            let scheduleJson = [];
+            try { categoriesJson = JSON.parse(pl.meal_categories); } catch {}
+            try { swapRulesJson = JSON.parse(pl.swap_rules); } catch {}
+            try { scheduleJson = JSON.parse(pl.schedule); } catch {}
+
+            const { error: planErr } = await supabase.from("meal_plans").upsert({
+              id: pl.id,
+              name: pl.name,
+              slug: pl.slug,
+              subtitle: pl.subtitle || "",
+              description: pl.description || "",
+              image: pl.image || "",
+              duration_days: pl.duration_days,
+              meal_categories: categoriesJson,
+              meals_per_day: pl.meals_per_day,
+              pricing_mode: pl.pricing_mode,
+              base_price: pl.base_price,
+              base_price_aed: pl.base_price_aed,
+              original_price: pl.original_price,
+              original_price_aed: pl.original_price_aed,
+              status: pl.status,
+              is_featured: Boolean(pl.is_featured),
+              sort_order: pl.sort_order || 0,
+              swap_rules: swapRulesJson,
+              schedule: scheduleJson,
+              created_at: pl.created_at,
+              updated_at: pl.updated_at,
+            }, { onConflict: "id" });
+            if (!planErr) syncedPlans++;
+          } catch {}
+        }
+
+        // C. Meal Subscriptions
+        const subs = db.prepare("SELECT * FROM meal_subscriptions").all();
+        let syncedSubs = 0;
+        for (const sb of subs) {
+          try {
+            let dailyScheduleJson = [];
+            try { dailyScheduleJson = JSON.parse(sb.daily_schedule); } catch {}
+
+            const { error: subErr } = await supabase.from("meal_subscriptions").upsert({
+              id: sb.id,
+              plan_id: sb.plan_id,
+              plan_name: sb.plan_name,
+              plan_duration: sb.plan_duration,
+              pricing_mode: sb.pricing_mode,
+              customer_name: sb.customer_name,
+              customer_phone: sb.customer_phone,
+              customer_email: sb.customer_email || null,
+              delivery_address: sb.delivery_address || "",
+              city: sb.city || "",
+              country: sb.country || "IN",
+              start_date: sb.start_date,
+              end_date: sb.end_date,
+              status: sb.status,
+              order_locked: Boolean(sb.order_locked),
+              locked_at: sb.locked_at || null,
+              confirmed_at: sb.confirmed_at || null,
+              total_amount: sb.total_amount,
+              currency: sb.currency || "INR",
+              swaps_used: sb.swaps_used || 0,
+              max_swaps_allowed: sb.max_swaps_allowed || 0,
+              daily_schedule: dailyScheduleJson,
+              notes: sb.notes || null,
+              created_at: sb.created_at,
+              updated_at: sb.updated_at,
+            }, { onConflict: "id" });
+            if (!subErr) syncedSubs++;
+          } catch {}
+        }
+
+        // D. Meal Audit Logs
+        const logs = db.prepare("SELECT * FROM meal_audit_logs").all();
+        let syncedLogs = 0;
+        for (const lg of logs) {
+          try {
+            let detailsJson = {};
+            try { detailsJson = JSON.parse(lg.details); } catch {}
+
+            const { error: logErr } = await supabase.from("meal_audit_logs").upsert({
+              id: lg.id,
+              subscription_id: lg.subscription_id,
+              action: lg.action,
+              performed_by: lg.performed_by,
+              details: detailsJson,
+              created_at: lg.created_at,
+            }, { onConflict: "id" });
+            if (!logErr) syncedLogs++;
+          } catch {}
+        }
+
+        console.log(`✅ Synced Meal Club: ${syncedCats} categories, ${syncedPlans} plans, ${syncedSubs} subscriptions, ${syncedLogs} audit logs.`);
+      }
+    } catch (err) {
+      console.warn("Could not read meal club data from SQLite for Supabase sync:", err.message);
     }
   }
 

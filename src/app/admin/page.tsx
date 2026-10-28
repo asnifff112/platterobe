@@ -4,19 +4,30 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { getAdminSession } from "@/lib/auth";
 import { getAllProducts } from "@/lib/db";
+import {
+  getAllMealPlans,
+  getMealCategories,
+  getAllSubscriptions,
+  getMealClubOverviewStats,
+  seedStarterMealPlansIfEmpty,
+} from "@/lib/meal-club-db";
 import AdminHeader from "@/components/admin/AdminHeader";
 import AdminDashboardClient from "@/components/admin/AdminDashboardClient";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Admin Dashboard - Platter Management",
+  title: "Admin Dashboard — Platter & Meal Club Management",
   robots: {
     index: false,
     follow: false,
   },
 };
 
-export default async function AdminDashboardPage() {
+type Props = {
+  searchParams?: Promise<{ tab?: string }>;
+};
+
+export default async function AdminDashboardPage({ searchParams }: Props) {
   await connection();
   const session = await getAdminSession();
 
@@ -25,28 +36,42 @@ export default async function AdminDashboardPage() {
     redirect("/admin/login");
   }
 
-  const products = await getAllProducts();
+  const resolvedParams = searchParams ? await searchParams : {};
+  const activeTabParam = resolvedParams.tab;
+
+  // Ensure starter plans if fresh
+  try {
+    await seedStarterMealPlansIfEmpty();
+  } catch (err) {
+    console.error("Error ensuring starter meal plans in admin:", err);
+  }
+
+  const [products, mealPlans, mealCategories, mealSubscriptions, mealOverviewStats] =
+    await Promise.all([
+      getAllProducts(),
+      getAllMealPlans(true),
+      getMealCategories(),
+      getAllSubscriptions(),
+      getMealClubOverviewStats(),
+    ]);
 
   return (
     <div className="min-h-screen bg-[#F8F5E9]/40 text-[#1A1A1A]">
       <AdminHeader username={session.username} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
-        {/* Top page title */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-[26px] md:text-[32px] font-heading font-800 text-[#1E3A2E] tracking-[-0.02em]">
-              Platter Catalog Management
-            </h1>
-            <p className="text-[14px] text-[#1A1A1A]/60 font-body mt-1">
-              Add, update categories, adjust prices, manage ingredients, and toggle availability.
-            </p>
-          </div>
-        </div>
-
-        {/* Interactive Dashboard */}
-        <AdminDashboardClient initialProducts={products} />
+        <AdminDashboardClient
+          initialProducts={products}
+          defaultTab={activeTabParam === "meal-club" ? "meal-club" : "catalog"}
+          mealClubData={{
+            initialPlans: mealPlans,
+            initialCategories: mealCategories,
+            initialSubscriptions: mealSubscriptions,
+            stats: mealOverviewStats,
+          }}
+        />
       </main>
     </div>
   );
 }
+

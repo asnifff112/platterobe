@@ -10,6 +10,8 @@ import { MENU_CATEGORIES, getCategoryDisplayName, normalizeCategoryKey } from "@
 import { toggleProductStatus, toggleProductFeaturedStatus } from "@/app/admin/actions";
 import ProductFormModal from "./ProductFormModal";
 import DeleteConfirmModal from "./DeleteConfirmModal";
+import MealClubAdmin from "./MealClubAdmin";
+import type { MealPlan, MealCategory, MealSubscription } from "@/data/meal-club-types";
 import {
   Plus,
   Search,
@@ -20,16 +22,36 @@ import {
   Eye,
   Filter,
   Star,
+  UtensilsCrossed,
+  Calendar,
 } from "lucide-react";
 
 interface AdminDashboardClientProps {
   initialProducts: Product[];
+  defaultTab?: "catalog" | "meal-club";
+  mealClubData?: {
+    initialPlans: MealPlan[];
+    initialCategories: MealCategory[];
+    initialSubscriptions: MealSubscription[];
+    stats: {
+      activePlansCount: number;
+      publishedPlansCount: number;
+      activeSubscriptionsCount: number;
+      pendingOrdersCount: number;
+      confirmedOrdersCount: number;
+      upcomingMealsCount: number;
+      unavailableProductsCount: number;
+    };
+  };
 }
 
 export default function AdminDashboardClient({
   initialProducts,
+  defaultTab = "catalog",
+  mealClubData,
 }: AdminDashboardClientProps) {
   const router = useRouter();
+  const [activeSection, setActiveSection] = useState<"catalog" | "meal-club">(defaultTab);
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
@@ -150,6 +172,58 @@ export default function AdminDashboardClient({
 
   return (
     <div className="space-y-8">
+      {/* Top Level Section Switcher: Catalog vs Meal Club */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-200/80 pb-5">
+        <div>
+          <h1 className="text-[26px] md:text-[32px] font-heading font-800 text-[#1E3A2E] tracking-[-0.02em]">
+            {activeSection === "catalog" ? "Platter Catalog Management" : "The Meal Club Management"}
+          </h1>
+          <p className="text-[14px] text-[#1A1A1A]/60 font-body mt-1">
+            {activeSection === "catalog"
+              ? "Add, update categories, adjust prices, manage ingredients, and toggle availability."
+              : "Manage 7, 14 & 30-day meal plans, daily menu planner, swap rules, subscriptions & order locking."}
+          </p>
+        </div>
+
+        <div className="inline-flex p-1 bg-stone-200/70 rounded-xl shrink-0 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setActiveSection("catalog")}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-heading font-bold uppercase tracking-wider transition-all ${
+              activeSection === "catalog"
+                ? "bg-white text-[#1E3A2E] shadow-xs"
+                : "text-stone-600 hover:text-[#1E3A2E]"
+            }`}
+          >
+            <UtensilsCrossed size={14} className={activeSection === "catalog" ? "text-[#6B8F56]" : "text-stone-400"} />
+            Platter Catalog
+            <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-stone-100 text-stone-600 font-mono">
+              {products.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSection("meal-club")}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-heading font-bold uppercase tracking-wider transition-all ${
+              activeSection === "meal-club"
+                ? "bg-[#1E3A2E] text-white shadow-xs"
+                : "text-stone-600 hover:text-[#1E3A2E]"
+            }`}
+          >
+            <Calendar size={14} className={activeSection === "meal-club" ? "text-[#6B8F56]" : "text-stone-400"} />
+            The Meal Club
+            {mealClubData && (
+              <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
+                activeSection === "meal-club" ? "bg-white/20 text-white" : "bg-stone-100 text-stone-600"
+              }`}>
+                {mealClubData.initialPlans.length}
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
+
       {/* Success notification toast */}
       {successToast && (
         <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-[8px] flex items-center justify-between font-body text-[13px] animate-fadeIn">
@@ -166,19 +240,29 @@ export default function AdminDashboardClient({
         </div>
       )}
 
-      {/* Metrics Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-[10px] border border-stone-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-          <p className="text-[11px] font-heading font-semibold uppercase tracking-[0.08em] text-[#1A1A1A]/50">
-            Total Platters
-          </p>
-          <p className="text-[28px] font-heading font-800 text-[#1E3A2E] mt-1">
-            {totalCount}
-          </p>
-          <p className="text-[12px] text-[#6B8F56] font-body mt-0.5">
-            Master catalog records
-          </p>
-        </div>
+      {activeSection === "meal-club" && mealClubData ? (
+        <MealClubAdmin
+          initialPlans={mealClubData.initialPlans}
+          initialCategories={mealClubData.initialCategories}
+          initialSubscriptions={mealClubData.initialSubscriptions}
+          allProducts={products}
+          stats={mealClubData.stats}
+        />
+      ) : (
+        <>
+          {/* Metrics Bar */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white p-5 rounded-[10px] border border-stone-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+              <p className="text-[11px] font-heading font-semibold uppercase tracking-[0.08em] text-[#1A1A1A]/50">
+                Total Platters
+              </p>
+              <p className="text-[28px] font-heading font-800 text-[#1E3A2E] mt-1">
+                {totalCount}
+              </p>
+              <p className="text-[12px] text-[#6B8F56] font-body mt-0.5">
+                Master catalog records
+              </p>
+            </div>
 
         <div className="bg-white p-5 rounded-[10px] border border-stone-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
           <div className="flex items-center justify-between">
@@ -564,6 +648,8 @@ export default function AdminDashboardClient({
           </table>
         </div>
       </div>
+      </>
+      )}
 
       {/* Edit/Create Modal */}
       <ProductFormModal

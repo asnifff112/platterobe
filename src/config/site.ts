@@ -25,6 +25,7 @@ export const siteConfig = {
   },
   nav: [
     { label: "Menu", href: "/menu" },
+    { label: "Meal Club", href: "/meal-club" },
     { label: "THE INDEX", href: "/index" },
     { label: "About", href: "/about" },
     { label: "Contact", href: "/contact" },
