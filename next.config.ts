@@ -12,6 +12,10 @@ const nextConfig: NextConfig = {
           source: "/index",
           destination: "/product-index",
         },
+        {
+          source: "/my-club",
+          destination: "/meal-club",
+        },
       ],
       afterFiles: [],
       fallback: [],

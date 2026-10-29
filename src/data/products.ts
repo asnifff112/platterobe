@@ -587,7 +587,7 @@ export function getProductImageUrl(
   _updatedAt?: string
 ): string {
   if (!image || !image.trim()) {
-    return "https://rsojkuiouwnotplrebki.supabase.co/storage/v1/object/public/product-images/classic-overnight-oats.jpg";
+    return "/images/classic-overnight-oats.jpg";
   }
   return image;
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import type { Product } from "@/data/products";
 import { getProductImageUrl } from "@/data/products";
+import ProductImage from "@/components/ProductImage";
 import { getCategoryDisplayName } from "@/data/categories";
 import { useCountry } from "@/components/CountryProvider";
 import {
@@ -80,15 +81,14 @@ export default function ProductView({ product }: ProductViewProps) {
         {/* Left: Product Image */}
         <div className="lg:col-span-6">
           <div className="relative aspect-square w-full rounded-[8px] overflow-hidden bg-[#F8F5E9]">
-            <Image
-              key={`detail-${product.id}-${imageUrl}`}
+            <ProductImage
               src={imageUrl}
-              unoptimized={Boolean(product.image?.startsWith("data:") || product.image?.startsWith("/uploads/") || product.image?.includes("?v="))}
               alt={`${product.name} — PLATTEROBE`}
               fill
               priority
               className="object-cover"
               sizes="(max-width: 1024px) 100vw, 600px"
+              productName={product.name}
             />
 
             {isPublished && hasDiscount && (

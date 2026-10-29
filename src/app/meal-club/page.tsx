@@ -4,15 +4,25 @@ import { Metadata } from "next";
 import { connection } from "next/server";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import MyClubComingSoon from "@/components/meal-club/MyClubComingSoon";
 import MealClubClient from "./MealClubClient";
 import { getPublishedMealPlans, seedStarterMealPlansIfEmpty } from "@/lib/meal-club-db";
 import { getAllProducts } from "@/lib/db";
 
+/**
+ * MY CLUB LAUNCH STATUS:
+ * - When false: Displays the temporary, polished "Coming Soon" page as requested.
+ * - When ready to launch: Set to true to activate the full interactive package system.
+ * All underlying database tables, meal plans, and subscriptions remain intact.
+ */
+const IS_MY_CLUB_LIVE = false;
+
 export const metadata: Metadata = {
-  title: "The Meal Club — Thoughtfully Planned Everyday Meals | PLATTEROBE",
+  title: "My Club — Coming Soon | PLATTEROBE",
   description:
-    "Curated 7-day, 14-day, and 30-day meal plans crafted with fresh ingredients, clean nutrition, and seamless meal swaps. Subscribe to everyday nourishment.",
+    "We’re preparing something special for your everyday nourishment. A little more care, thoughtfully brought together. My Club is coming soon.",
   keywords: [
+    "my club",
     "meal club",
     "meal subscription",
     "breakfast subscription",
@@ -21,14 +31,26 @@ export const metadata: Metadata = {
     "clean eating",
   ],
   openGraph: {
-    title: "The Meal Club | PLATTEROBE",
-    description: "Thoughtfully planned meal packages for your everyday. Flexible durations, transparent nutrition, and easy swaps.",
+    title: "My Club — Coming Soon | PLATTEROBE",
+    description: "Something Good Is Coming. We’re preparing something special for your everyday nourishment.",
     type: "website",
   },
 };
 
 export default async function MealClubPage() {
   await connection();
+
+  if (!IS_MY_CLUB_LIVE) {
+    return (
+      <>
+        <Navbar />
+        <main id="main-content" className="min-h-screen bg-[#FDFBF7] pt-16 md:pt-20">
+          <MyClubComingSoon />
+        </main>
+        <Footer />
+      </>
+    );
+  }
 
   // Ensure starter plans exist if catalog was initialized fresh
   try {

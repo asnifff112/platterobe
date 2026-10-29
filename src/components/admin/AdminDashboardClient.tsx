@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import ProductImage from "@/components/ProductImage";
 import { useRouter } from "next/navigation";
 import type { Product } from "@/data/products";
 import { getProductImageUrl } from "@/data/products";
@@ -451,14 +452,13 @@ export default function AdminDashboardClient({
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-3">
                         <div className="relative w-12 h-12 rounded-[6px] overflow-hidden bg-[#F8F5E9] border border-stone-200 shrink-0">
-                          <Image
-                            key={`admin-${item.id}-${getProductImageUrl(item.image, item.updatedAt)}`}
+                          <ProductImage
                             src={getProductImageUrl(item.image, item.updatedAt)}
-                            unoptimized={Boolean(item.image?.startsWith("data:"))}
                             alt={item.name}
                             fill
                             sizes="48px"
                             className="object-cover"
+                            productName={item.name}
                           />
                         </div>
                         <div className="min-w-0">

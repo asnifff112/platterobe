@@ -3,6 +3,7 @@
 import { useState, useTransition, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import ProductImage from "@/components/ProductImage";
 import { useSearchParams } from "next/navigation";
 import {
   Search,
@@ -225,18 +226,13 @@ export default function IndexClient({
               {/* Product Image */}
               <div className="sm:col-span-5">
                 <div className="relative aspect-square w-full rounded-[8px] overflow-hidden bg-[#F8F5E9] border border-stone-200">
-                  <Image
+                  <ProductImage
                     src={product.image}
                     alt={`${product.name} — PLATTEROBE`}
                     fill
-                    unoptimized={Boolean(
-                      product.image.startsWith("http") ||
-                        product.image.startsWith("data:") ||
-                        product.image.startsWith("/uploads/") ||
-                        product.image.includes("?v=")
-                    )}
                     className="object-cover"
                     sizes="(max-width: 640px) 100vw, 300px"
+                    productName={product.name}
                   />
 
                   {hasDiscountInCountry && (
